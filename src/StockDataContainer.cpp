@@ -4,11 +4,15 @@
 
 // 构造函数
 StockDataContainer::StockDataContainer()
-    : GenericJsonContainer("StockData"), code_(""), time_(0) {
+    : GenericJsonContainer("StockData"), code_(""), index_key_("time"), index_value_("") {
 }
 
 StockDataContainer::StockDataContainer(const std::string& source)
-    : GenericJsonContainer(source), code_(""), time_(0) {
+    : GenericJsonContainer(source), code_(""), index_key_("time"), index_value_("") {
+}
+
+StockDataContainer::StockDataContainer(const std::string& source, const std::string& index_key)
+    : GenericJsonContainer(source), code_(""), index_key_(index_key), index_value_("") {
 }
 
 // 重写JSON解析方法，自动提取关键字段
@@ -40,7 +44,7 @@ bool StockDataContainer::parseFromJsonString(const std::string& jsonStr, const s
 
 // 从解析后的数据中自动提取关键字段
 void StockDataContainer::extractKeyFields() {
-    // 提取股票代码
+    // 提取股票代码（固定字段）
     try {
         if (hasKey("code")) {
             const auto& codeValue = getValue("code");
@@ -54,39 +58,55 @@ void StockDataContainer::extractKeyFields() {
         code_ = "";  // 提取失败则置空
     }
 
-    // 提取时间戳
+    // 提取索引字段（动态配置）
     try {
-        // 优先尝试time字段
-        if (hasKey("time")) {
-            const auto& timeValue = getValue("time");
-            if (timeValue.isInt()) {
-                time_ = timeValue.asInt();
-            } else if (timeValue.isString()) {
-                // 尝试将字符串转换为数字
-                try {
-                    time_ = std::stoll(timeValue.asString());
-                } catch (...) {
-                    time_ = 0;
-                }
-            }
-        }
-        // 如果time字段不存在或无效，尝试其他时间字段
-        else if (hasKey("date")) {
-            const auto& dateValue = getValue("date");
-            if (dateValue.isInt()) {
-                time_ = dateValue.asInt();
-            }
-        }
-        // 尝试recv_time字段
-        else if (hasKey("recv_time")) {
-            const auto& recvTimeValue = getValue("recv_time");
-            if (recvTimeValue.isInt()) {
-                time_ = recvTimeValue.asInt();
+        if (!index_key_.empty() && hasKey(index_key_)) {
+            const auto& indexValue = getValue(index_key_);
+            if (indexValue.isString()) {
+                index_value_ = indexValue.asString();
+            } else if (indexValue.isInt()) {
+                index_value_ = std::to_string(indexValue.asInt());
+            } else if (indexValue.isDouble()) {
+                index_value_ = std::to_string(indexValue.asDouble());
+            } else if (indexValue.isBool()) {
+                index_value_ = indexValue.asBool() ? "true" : "false";
             }
         }
     } catch (...) {
-        time_ = 0;  // 提取失败则置为0
+        index_value_ = "";  // 提取失败则置空
     }
+}
+
+// 索引字段配置
+void StockDataContainer::setIndexKey(const std::string& key) {
+    index_key_ = key;
+    // 如果已经有数据，重新提取索引字段
+    if (!empty()) {
+        extractKeyFields();
+    }
+}
+
+// 向后兼容接口（当索引字段为数字类型时）
+int64_t StockDataContainer::getIndexAsInt() const {
+    try {
+        if (!index_value_.empty()) {
+            return std::stoll(index_value_);
+        }
+    } catch (...) {
+        // 转换失败
+    }
+    return 0;
+}
+
+double StockDataContainer::getIndexAsDouble() const {
+    try {
+        if (!index_value_.empty()) {
+            return std::stod(index_value_);
+        }
+    } catch (...) {
+        // 转换失败
+    }
+    return 0.0;
 }
 
 // 基本信息输出
@@ -94,7 +114,8 @@ void StockDataContainer::printStockInfo() const {
     std::cout << "=== StockDataContainer 信息 ===" << std::endl;
     std::cout << "数据源: " << getSource() << std::endl;
     std::cout << "股票代码: " << (code_.empty() ? "未提取" : code_) << std::endl;
-    std::cout << "时间戳: " << time_ << std::endl;
+    std::cout << "索引字段: " << index_key_ << std::endl;
+    std::cout << "索引值: " << (index_value_.empty() ? "未提取" : index_value_) << std::endl;
     std::cout << "原始JSON长度: " << raw_json_.length() << " 字符" << std::endl;
     std::cout << "解析字段数: " << size() << std::endl;
 
