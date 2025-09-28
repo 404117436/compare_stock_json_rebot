@@ -1,0 +1,5 @@
+{"valid": "json", "number": 123}
+invalid json without quotes
+{"incomplete": "json"
+
+{"another": "valid", "after": "error"}

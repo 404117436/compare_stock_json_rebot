@@ -1,0 +1,857 @@
+#include "GenericJsonContainer.h"
+#include <sstream>
+#include <fstream>
+#include <algorithm>
+#include <iomanip>
+
+// ==================== CustomValue 实现 ====================
+
+// 默认构造函数（null）
+CustomValue::CustomValue() : type_(JsonValueType::Null) {
+    data_.intValue = 0;
+}
+
+// 各类型构造函数
+CustomValue::CustomValue(bool value) : type_(JsonValueType::Bool) {
+    data_.boolValue = value;
+}
+
+CustomValue::CustomValue(int value) : type_(JsonValueType::Int) {
+    data_.intValue = static_cast<int64_t>(value);
+}
+
+CustomValue::CustomValue(int64_t value) : type_(JsonValueType::Int) {
+    data_.intValue = value;
+}
+
+CustomValue::CustomValue(double value) : type_(JsonValueType::Double) {
+    data_.doubleValue = value;
+}
+
+CustomValue::CustomValue(const std::string& value) : type_(JsonValueType::String) {
+    data_.stringValue = new std::string(value);
+}
+
+CustomValue::CustomValue(const char* value) : type_(JsonValueType::String) {
+    data_.stringValue = new std::string(value);
+}
+
+CustomValue::CustomValue(const JsonArrayData& array) : type_(JsonValueType::Array) {
+    data_.arrayValue = new JsonArrayData(array);
+}
+
+CustomValue::CustomValue(const JsonObjectData& object) : type_(JsonValueType::Object) {
+    data_.objectValue = new JsonObjectData(object);
+}
+
+// 拷贝构造函数
+CustomValue::CustomValue(const CustomValue& other) : type_(other.type_) {
+    copyFrom(other);
+}
+
+// 拷贝赋值操作符
+CustomValue& CustomValue::operator=(const CustomValue& other) {
+    if (this != &other) {
+        cleanup();
+        type_ = other.type_;
+        copyFrom(other);
+    }
+    return *this;
+}
+
+// 移动构造函数
+CustomValue::CustomValue(CustomValue&& other) : type_(other.type_) {
+    data_ = other.data_;
+    other.type_ = JsonValueType::Null;
+    other.data_.intValue = 0;
+}
+
+// 移动赋值操作符
+CustomValue& CustomValue::operator=(CustomValue&& other) {
+    if (this != &other) {
+        cleanup();
+        type_ = other.type_;
+        data_ = other.data_;
+        other.type_ = JsonValueType::Null;
+        other.data_.intValue = 0;
+    }
+    return *this;
+}
+
+// 析构函数
+CustomValue::~CustomValue() {
+    cleanup();
+}
+
+// 清理资源
+void CustomValue::cleanup() {
+    switch (type_) {
+        case JsonValueType::String:
+            delete data_.stringValue;
+            break;
+        case JsonValueType::Array:
+            delete data_.arrayValue;
+            break;
+        case JsonValueType::Object:
+            delete data_.objectValue;
+            break;
+        default:
+            // 基本类型无需清理
+            break;
+    }
+}
+
+// 从其他对象拷贝数据
+void CustomValue::copyFrom(const CustomValue& other) {
+    switch (other.type_) {
+        case JsonValueType::Null:
+            data_.intValue = 0;
+            break;
+        case JsonValueType::Bool:
+            data_.boolValue = other.data_.boolValue;
+            break;
+        case JsonValueType::Int:
+            data_.intValue = other.data_.intValue;
+            break;
+        case JsonValueType::Double:
+            data_.doubleValue = other.data_.doubleValue;
+            break;
+        case JsonValueType::String:
+            data_.stringValue = new std::string(*other.data_.stringValue);
+            break;
+        case JsonValueType::Array:
+            data_.arrayValue = new JsonArrayData(*other.data_.arrayValue);
+            break;
+        case JsonValueType::Object:
+            data_.objectValue = new JsonObjectData(*other.data_.objectValue);
+            break;
+    }
+}
+
+// 类型安全的值获取方法
+bool CustomValue::asBool() const {
+    if (type_ != JsonValueType::Bool) {
+        throw GenericJsonException("Value is not a boolean");
+    }
+    return data_.boolValue;
+}
+
+int64_t CustomValue::asInt() const {
+    if (type_ != JsonValueType::Int) {
+        throw GenericJsonException("Value is not an integer");
+    }
+    return data_.intValue;
+}
+
+double CustomValue::asDouble() const {
+    if (type_ == JsonValueType::Double) {
+        return data_.doubleValue;
+    } else if (type_ == JsonValueType::Int) {
+        return static_cast<double>(data_.intValue);
+    } else {
+        throw GenericJsonException("Value is not a number");
+    }
+}
+
+const std::string& CustomValue::asString() const {
+    if (type_ != JsonValueType::String) {
+        throw GenericJsonException("Value is not a string");
+    }
+    return *data_.stringValue;
+}
+
+const JsonArrayData& CustomValue::asArray() const {
+    if (type_ != JsonValueType::Array) {
+        throw GenericJsonException("Value is not an array");
+    }
+    return *data_.arrayValue;
+}
+
+const JsonObjectData& CustomValue::asObject() const {
+    if (type_ != JsonValueType::Object) {
+        throw GenericJsonException("Value is not an object");
+    }
+    return *data_.objectValue;
+}
+
+// 可修改的引用获取
+JsonArrayData& CustomValue::getArrayRef() {
+    if (type_ != JsonValueType::Array) {
+        throw GenericJsonException("Value is not an array");
+    }
+    return *data_.arrayValue;
+}
+
+JsonObjectData& CustomValue::getObjectRef() {
+    if (type_ != JsonValueType::Object) {
+        throw GenericJsonException("Value is not an object");
+    }
+    return *data_.objectValue;
+}
+
+// 数组操作
+size_t CustomValue::arraySize() const {
+    if (type_ != JsonValueType::Array) {
+        return 0;
+    }
+    return data_.arrayValue->size();
+}
+
+void CustomValue::arrayPush(const CustomValue& value) {
+    if (type_ != JsonValueType::Array) {
+        throw GenericJsonException("Value is not an array");
+    }
+    data_.arrayValue->push_back(value);
+}
+
+CustomValue& CustomValue::arrayAt(size_t index) {
+    if (type_ != JsonValueType::Array) {
+        throw GenericJsonException("Value is not an array");
+    }
+    if (index >= data_.arrayValue->size()) {
+        throw GenericJsonException("Array index out of bounds");
+    }
+    return (*data_.arrayValue)[index];
+}
+
+const CustomValue& CustomValue::arrayAt(size_t index) const {
+    if (type_ != JsonValueType::Array) {
+        throw GenericJsonException("Value is not an array");
+    }
+    if (index >= data_.arrayValue->size()) {
+        throw GenericJsonException("Array index out of bounds");
+    }
+    return (*data_.arrayValue)[index];
+}
+
+// 对象操作
+size_t CustomValue::objectSize() const {
+    if (type_ != JsonValueType::Object) {
+        return 0;
+    }
+    return data_.objectValue->size();
+}
+
+bool CustomValue::hasKey(const std::string& key) const {
+    if (type_ != JsonValueType::Object) {
+        return false;
+    }
+
+    for (const auto& pair : *data_.objectValue) {
+        if (pair.first == key) {
+            return true;
+        }
+    }
+    return false;
+}
+
+void CustomValue::setKey(const std::string& key, const CustomValue& value) {
+    if (type_ != JsonValueType::Object) {
+        throw GenericJsonException("Value is not an object");
+    }
+
+    // 查找是否已存在
+    for (auto& pair : *data_.objectValue) {
+        if (pair.first == key) {
+            pair.second = value;
+            return;
+        }
+    }
+
+    // 不存在则添加
+    data_.objectValue->push_back(std::make_pair(key, value));
+}
+
+CustomValue& CustomValue::getKey(const std::string& key) {
+    if (type_ != JsonValueType::Object) {
+        throw GenericJsonException("Value is not an object");
+    }
+
+    for (auto& pair : *data_.objectValue) {
+        if (pair.first == key) {
+            return pair.second;
+        }
+    }
+
+    throw GenericJsonException("Key '" + key + "' not found");
+}
+
+const CustomValue& CustomValue::getKey(const std::string& key) const {
+    if (type_ != JsonValueType::Object) {
+        throw GenericJsonException("Value is not an object");
+    }
+
+    for (const auto& pair : *data_.objectValue) {
+        if (pair.first == key) {
+            return pair.second;
+        }
+    }
+
+    throw GenericJsonException("Key '" + key + "' not found");
+}
+
+std::vector<std::string> CustomValue::getKeys() const {
+    if (type_ != JsonValueType::Object) {
+        throw GenericJsonException("Value is not an object");
+    }
+
+    std::vector<std::string> keys;
+    for (const auto& pair : *data_.objectValue) {
+        keys.push_back(pair.first);
+    }
+    return keys;
+}
+
+// 操作符重载
+CustomValue& CustomValue::operator[](const std::string& key) {
+    return getKey(key);
+}
+
+const CustomValue& CustomValue::operator[](const std::string& key) const {
+    return getKey(key);
+}
+
+CustomValue& CustomValue::operator[](size_t index) {
+    return arrayAt(index);
+}
+
+const CustomValue& CustomValue::operator[](size_t index) const {
+    return arrayAt(index);
+}
+
+// 转换为字符串
+std::string CustomValue::toString() const {
+    switch (type_) {
+        case JsonValueType::Null:
+            return "null";
+        case JsonValueType::Bool:
+            return data_.boolValue ? "true" : "false";
+        case JsonValueType::Int:
+            return std::to_string(data_.intValue);
+        case JsonValueType::Double:
+            return std::to_string(data_.doubleValue);
+        case JsonValueType::String:
+            return *data_.stringValue;
+        case JsonValueType::Array:
+            return "[Array(" + std::to_string(data_.arrayValue->size()) + ")]";
+        case JsonValueType::Object:
+            return "{Object(" + std::to_string(data_.objectValue->size()) + ")}";
+        default:
+            return "Unknown";
+    }
+}
+
+std::string CustomValue::toJsonString() const {
+    std::stringstream ss;
+
+    switch (type_) {
+        case JsonValueType::Null:
+            ss << "null";
+            break;
+        case JsonValueType::Bool:
+            ss << (data_.boolValue ? "true" : "false");
+            break;
+        case JsonValueType::Int:
+            ss << data_.intValue;
+            break;
+        case JsonValueType::Double:
+            ss << std::fixed << std::setprecision(4) << data_.doubleValue;
+            break;
+        case JsonValueType::String:
+            ss << "\"" << *data_.stringValue << "\"";
+            break;
+        case JsonValueType::Array: {
+            ss << "[";
+            for (size_t i = 0; i < data_.arrayValue->size(); ++i) {
+                if (i > 0) ss << ",";
+                ss << (*data_.arrayValue)[i].toJsonString();
+            }
+            ss << "]";
+            break;
+        }
+        case JsonValueType::Object: {
+            ss << "{";
+            for (size_t i = 0; i < data_.objectValue->size(); ++i) {
+                if (i > 0) ss << ",";
+                const auto& pair = (*data_.objectValue)[i];
+                ss << "\"" << pair.first << "\":" << pair.second.toJsonString();
+            }
+            ss << "}";
+            break;
+        }
+    }
+
+    return ss.str();
+}
+
+void CustomValue::print(int indent) const {
+    std::string indentStr(indent * 2, ' ');
+
+    switch (type_) {
+        case JsonValueType::Null:
+            std::cout << "null";
+            break;
+        case JsonValueType::Bool:
+            std::cout << (data_.boolValue ? "true" : "false");
+            break;
+        case JsonValueType::Int:
+            std::cout << data_.intValue;
+            break;
+        case JsonValueType::Double:
+            std::cout << std::fixed << std::setprecision(4) << data_.doubleValue;
+            break;
+        case JsonValueType::String:
+            std::cout << "\"" << *data_.stringValue << "\"";
+            break;
+        case JsonValueType::Array:
+            std::cout << "[\n";
+            for (size_t i = 0; i < data_.arrayValue->size(); ++i) {
+                std::cout << indentStr << "  ";
+                (*data_.arrayValue)[i].print(indent + 1);
+                if (i < data_.arrayValue->size() - 1) std::cout << ",";
+                std::cout << "\n";
+            }
+            std::cout << indentStr << "]";
+            break;
+        case JsonValueType::Object:
+            std::cout << "{\n";
+            for (size_t i = 0; i < data_.objectValue->size(); ++i) {
+                const auto& pair = (*data_.objectValue)[i];
+                std::cout << indentStr << "  \"" << pair.first << "\": ";
+                pair.second.print(indent + 1);
+                if (i < data_.objectValue->size() - 1) std::cout << ",";
+                std::cout << "\n";
+            }
+            std::cout << indentStr << "}";
+            break;
+    }
+}
+
+// 静态创建方法
+CustomValue CustomValue::createNull() {
+    return CustomValue();
+}
+
+CustomValue CustomValue::createObject() {
+    return CustomValue(JsonObjectData());
+}
+
+CustomValue CustomValue::createArray() {
+    return CustomValue(JsonArrayData());
+}
+
+// ==================== GenericJsonContainer 实现 ====================
+
+GenericJsonContainer::GenericJsonContainer() : source_("Unknown") {
+}
+
+GenericJsonContainer::GenericJsonContainer(const std::string& source) : source_(source) {
+}
+
+bool GenericJsonContainer::parseFromJsonString(const std::string& jsonStr) {
+    try {
+        JsonParser parser(jsonStr);
+        return parseFromJsonParser(parser);
+    } catch (const JsonParseException& e) {
+        std::cerr << "JSON解析错误: " << e.what() << std::endl;
+        return false;
+    }
+}
+
+bool GenericJsonContainer::parseFromJsonParser(const JsonParser& parser) {
+    try {
+        data_.clear();
+        auto root = parser.getRoot();
+
+        if (root.isObject()) {
+            parseJsonObject(root, data_);
+            return true;
+        } else {
+            std::cerr << "根节点不是JSON对象" << std::endl;
+            return false;
+        }
+    } catch (const JsonParseException& e) {
+        std::cerr << "解析错误: " << e.what() << std::endl;
+        return false;
+    } catch (const GenericJsonException& e) {
+        std::cerr << "通用JSON错误: " << e.what() << std::endl;
+        return false;
+    }
+}
+
+// 解析JSON值
+CustomValue GenericJsonContainer::parseJsonValue(const JsonValue& jsonValue) {
+    if (jsonValue.isNull()) {
+        return CustomValue::createNull();
+    } else if (jsonValue.isBool()) {
+        return CustomValue(jsonValue.asBool());
+    } else if (jsonValue.isInt()) {
+        return CustomValue(static_cast<int64_t>(jsonValue.asInt()));
+    } else if (jsonValue.isDouble()) {
+        return CustomValue(jsonValue.asDouble());
+    } else if (jsonValue.isString()) {
+        return CustomValue(jsonValue.asString());
+    } else if (jsonValue.isArray()) {
+        JsonArrayData arrayData;
+        parseJsonArray(jsonValue, arrayData);
+        return CustomValue(arrayData);
+    } else if (jsonValue.isObject()) {
+        JsonObjectData objectData;
+        parseJsonObject(jsonValue, objectData);
+        return CustomValue(objectData);
+    } else {
+        return CustomValue::createNull();
+    }
+}
+
+// 解析JSON对象
+void GenericJsonContainer::parseJsonObject(const JsonValue& jsonObj, JsonObjectData& data) {
+    if (!jsonObj.isObject()) {
+        throw GenericJsonException("值不是JSON对象");
+    }
+
+    auto keys = jsonObj.getKeys();
+    for (const auto& key : keys) {
+        auto value = jsonObj[key];
+        CustomValue customValue = parseJsonValue(value);
+        data.push_back(std::make_pair(key, customValue));
+    }
+}
+
+// 解析JSON数组
+void GenericJsonContainer::parseJsonArray(const JsonValue& jsonArray, JsonArrayData& data) {
+    if (!jsonArray.isArray()) {
+        throw GenericJsonException("值不是JSON数组");
+    }
+
+    for (size_t i = 0; i < jsonArray.arraySize(); ++i) {
+        auto element = jsonArray[i];
+        CustomValue customValue = parseJsonValue(element);
+        data.push_back(customValue);
+    }
+}
+
+// 键值对操作
+void GenericJsonContainer::setValue(const std::string& key, const CustomValue& value) {
+    auto it = findKey(key);
+    if (it != data_.end()) {
+        it->second = value;
+    } else {
+        data_.push_back(std::make_pair(key, value));
+    }
+}
+
+bool GenericJsonContainer::hasKey(const std::string& key) const {
+    return findKey(key) != data_.end();
+}
+
+const CustomValue& GenericJsonContainer::getValue(const std::string& key) const {
+    auto it = findKey(key);
+    if (it != data_.end()) {
+        return it->second;
+    }
+    throw GenericJsonException("键 '" + key + "' 不存在");
+}
+
+CustomValue& GenericJsonContainer::getValue(const std::string& key) {
+    auto it = findKey(key);
+    if (it != data_.end()) {
+        return it->second;
+    }
+    throw GenericJsonException("键 '" + key + "' 不存在");
+}
+
+std::vector<std::string> GenericJsonContainer::getAllKeys() const {
+    std::vector<std::string> keys;
+    for (const auto& pair : data_) {
+        keys.push_back(pair.first);
+    }
+    return keys;
+}
+
+// 操作符重载
+CustomValue& GenericJsonContainer::operator[](const std::string& key) {
+    auto it = findKey(key);
+    if (it != data_.end()) {
+        return it->second;
+    }
+
+    // 键不存在，创建一个null值
+    data_.push_back(std::make_pair(key, CustomValue::createNull()));
+    return data_.back().second;
+}
+
+const CustomValue& GenericJsonContainer::operator[](const std::string& key) const {
+    return getValue(key);
+}
+
+// 查找操作
+JsonObjectData::iterator GenericJsonContainer::find(const std::string& key) {
+    return findKey(key);
+}
+
+JsonObjectData::const_iterator GenericJsonContainer::find(const std::string& key) const {
+    return findKey(key);
+}
+
+// 内部查找方法
+JsonObjectData::iterator GenericJsonContainer::findKey(const std::string& key) {
+    return std::find_if(data_.begin(), data_.end(),
+        [&key](const JsonKeyValuePair& pair) { return pair.first == key; });
+}
+
+JsonObjectData::const_iterator GenericJsonContainer::findKey(const std::string& key) const {
+    return std::find_if(data_.begin(), data_.end(),
+        [&key](const JsonKeyValuePair& pair) { return pair.first == key; });
+}
+
+// 删除操作
+bool GenericJsonContainer::removeKey(const std::string& key) {
+    auto it = findKey(key);
+    if (it != data_.end()) {
+        data_.erase(it);
+        return true;
+    }
+    return false;
+}
+
+// 输出方法
+void GenericJsonContainer::print() const {
+    std::cout << "=== GenericJsonContainer (" << source_ << ") ===" << std::endl;
+    std::cout << "键值对数量: " << data_.size() << std::endl;
+
+    for (const auto& pair : data_) {
+        std::cout << "\"" << pair.first << "\": ";
+        std::cout << pair.second.toString() << std::endl;
+    }
+}
+
+void GenericJsonContainer::printDetailed() const {
+    std::cout << "=== 详细信息 (" << source_ << ") ===" << std::endl;
+    std::cout << "键值对数量: " << data_.size() << std::endl;
+
+    for (const auto& pair : data_) {
+        std::cout << "\n键: \"" << pair.first << "\"" << std::endl;
+        std::cout << "类型: " << jsonValueTypeToString(pair.second.getType()) << std::endl;
+        std::cout << "值: ";
+        pair.second.print(0);
+        std::cout << std::endl;
+    }
+}
+
+void GenericJsonContainer::printKeyValuePairs() const {
+    std::cout << "=== 键值对列表 (" << source_ << ") ===" << std::endl;
+
+    for (size_t i = 0; i < data_.size(); ++i) {
+        const auto& pair = data_[i];
+        std::cout << "[" << i << "] \"" << pair.first << "\" => "
+                  << jsonValueTypeToString(pair.second.getType())
+                  << " (" << pair.second.toString() << ")" << std::endl;
+    }
+}
+
+std::string GenericJsonContainer::toString() const {
+    std::stringstream ss;
+    ss << "GenericJsonContainer(" << source_ << "): " << data_.size() << " pairs\n";
+
+    for (const auto& pair : data_) {
+        ss << "  \"" << pair.first << "\": " << pair.second.toString() << "\n";
+    }
+
+    return ss.str();
+}
+
+std::string GenericJsonContainer::toJsonString() const {
+    std::stringstream ss;
+    ss << "{";
+
+    for (size_t i = 0; i < data_.size(); ++i) {
+        if (i > 0) ss << ",";
+        const auto& pair = data_[i];
+        ss << "\"" << pair.first << "\":" << pair.second.toJsonString();
+    }
+
+    ss << "}";
+    return ss.str();
+}
+
+// 统计信息
+void GenericJsonContainer::printStatistics() const {
+    std::cout << "\n=== 统计信息 (" << source_ << ") ===" << std::endl;
+    std::cout << "总键值对数: " << data_.size() << std::endl;
+
+    std::cout << "类型分布:" << std::endl;
+    std::cout << "  Null: " << countByType(JsonValueType::Null) << std::endl;
+    std::cout << "  Bool: " << countByType(JsonValueType::Bool) << std::endl;
+    std::cout << "  Int: " << countByType(JsonValueType::Int) << std::endl;
+    std::cout << "  Double: " << countByType(JsonValueType::Double) << std::endl;
+    std::cout << "  String: " << countByType(JsonValueType::String) << std::endl;
+    std::cout << "  Array: " << countByType(JsonValueType::Array) << std::endl;
+    std::cout << "  Object: " << countByType(JsonValueType::Object) << std::endl;
+}
+
+size_t GenericJsonContainer::countByType(JsonValueType type) const {
+    size_t count = 0;
+    for (const auto& pair : data_) {
+        if (pair.second.getType() == type) {
+            count++;
+        }
+    }
+    return count;
+}
+
+// 导出功能
+bool GenericJsonContainer::exportToFile(const std::string& filename) const {
+    std::ofstream file(filename);
+    if (!file.is_open()) {
+        std::cerr << "无法创建文件: " << filename << std::endl;
+        return false;
+    }
+
+    file << toString();
+    file.close();
+
+    std::cout << "成功导出到文件: " << filename << std::endl;
+    return true;
+}
+
+bool GenericJsonContainer::exportToJson(const std::string& filename) const {
+    std::ofstream file(filename);
+    if (!file.is_open()) {
+        std::cerr << "无法创建JSON文件: " << filename << std::endl;
+        return false;
+    }
+
+    file << toJsonString();
+    file.close();
+
+    std::cout << "成功导出JSON到: " << filename << std::endl;
+    return true;
+}
+
+// 批量操作
+void GenericJsonContainer::merge(const GenericJsonContainer& other) {
+    for (const auto& pair : other.data_) {
+        setValue(pair.first, pair.second);
+    }
+}
+
+GenericJsonContainer GenericJsonContainer::filter(const std::vector<std::string>& keys) const {
+    GenericJsonContainer filtered(source_ + "_filtered");
+
+    for (const auto& key : keys) {
+        if (hasKey(key)) {
+            filtered.setValue(key, getValue(key));
+        }
+    }
+
+    return filtered;
+}
+
+// ==================== 辅助函数实现 ====================
+
+std::string jsonValueTypeToString(JsonValueType type) {
+    switch (type) {
+        case JsonValueType::Null: return "Null";
+        case JsonValueType::Bool: return "Bool";
+        case JsonValueType::Int: return "Int";
+        case JsonValueType::Double: return "Double";
+        case JsonValueType::String: return "String";
+        case JsonValueType::Array: return "Array";
+        case JsonValueType::Object: return "Object";
+        default: return "Unknown";
+    }
+}
+
+void printJsonValueType(JsonValueType type) {
+    std::cout << jsonValueTypeToString(type);
+}
+
+// ==================== JsonContainerCollection 实现 ====================
+
+JsonContainerCollection::JsonContainerCollection(const std::string& name)
+    : collectionName_(name) {
+}
+
+void JsonContainerCollection::addContainer(const GenericJsonContainer& container) {
+    containers_.push_back(container);
+}
+
+void JsonContainerCollection::addContainer(GenericJsonContainer&& container) {
+    containers_.push_back(std::move(container));
+}
+
+bool JsonContainerCollection::addFromJsonArray(const std::string& jsonArrayStr) {
+    // 简化实现：将JSON字符串作为单个容器处理
+    GenericJsonContainer container("ArrayElement");
+    if (container.parseFromJsonString(jsonArrayStr)) {
+        addContainer(std::move(container));
+        return true;
+    }
+    return false;
+}
+
+std::vector<GenericJsonContainer*> JsonContainerCollection::findByKey(const std::string& key) {
+    std::vector<GenericJsonContainer*> result;
+    for (auto& container : containers_) {
+        if (container.hasKey(key)) {
+            result.push_back(&container);
+        }
+    }
+    return result;
+}
+
+std::vector<GenericJsonContainer*> JsonContainerCollection::findByKeyValue(const std::string& key, const std::string& value) {
+    std::vector<GenericJsonContainer*> result;
+    for (auto& container : containers_) {
+        if (container.hasKey(key)) {
+            try {
+                const auto& val = container.getValue(key);
+                if (val.isString() && val.asString() == value) {
+                    result.push_back(&container);
+                }
+            } catch (...) {
+                // 忽略类型错误
+            }
+        }
+    }
+    return result;
+}
+
+void JsonContainerCollection::printSummary() const {
+    std::cout << "=== " << collectionName_ << " 摘要 ===" << std::endl;
+    std::cout << "容器数量: " << containers_.size() << std::endl;
+
+    for (size_t i = 0; i < containers_.size(); ++i) {
+        std::cout << "[" << i << "] " << containers_[i].getSource()
+                  << " (" << containers_[i].size() << " pairs)" << std::endl;
+    }
+}
+
+void JsonContainerCollection::printAll() const {
+    std::cout << "=== " << collectionName_ << " 详细信息 ===" << std::endl;
+
+    for (size_t i = 0; i < containers_.size(); ++i) {
+        std::cout << "\n--- 容器 " << i << " ---" << std::endl;
+        containers_[i].print();
+    }
+}
+
+bool JsonContainerCollection::exportAllToJson(const std::string& filename) const {
+    std::ofstream file(filename);
+    if (!file.is_open()) {
+        std::cerr << "无法创建文件: " << filename << std::endl;
+        return false;
+    }
+
+    file << "[";
+    for (size_t i = 0; i < containers_.size(); ++i) {
+        if (i > 0) file << ",";
+        file << containers_[i].toJsonString();
+    }
+    file << "]";
+
+    file.close();
+    std::cout << "成功导出 " << containers_.size() << " 个容器到: " << filename << std::endl;
+    return true;
+}

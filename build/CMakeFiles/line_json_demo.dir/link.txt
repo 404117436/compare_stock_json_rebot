@@ -1,0 +1,1 @@
+/usr/bin/c++ -O3 -DNDEBUG CMakeFiles/line_json_demo.dir/example/line_json_demo.cpp.o -o line_json_demo  libLineReader.a libGenericJsonContainer.a libJsonParser.a 

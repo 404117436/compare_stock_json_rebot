@@ -1,0 +1,3 @@
+Windows line ending test
+Second line with CRLF
+Third line

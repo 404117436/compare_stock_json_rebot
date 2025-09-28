@@ -1,0 +1,2 @@
+/usr/bin/ar qc libLineReader.a CMakeFiles/LineReader.dir/src/LineReader.cpp.o
+/usr/bin/ranlib libLineReader.a

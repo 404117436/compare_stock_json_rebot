@@ -1,0 +1,2 @@
+/usr/bin/ar qc libGenericJsonContainer.a CMakeFiles/GenericJsonContainer.dir/src/GenericJsonContainer.cpp.o
+/usr/bin/ranlib libGenericJsonContainer.a
