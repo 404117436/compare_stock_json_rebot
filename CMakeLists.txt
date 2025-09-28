@@ -128,6 +128,12 @@ add_executable(line_json_demo example/line_json_demo.cpp)
 # 链接需要的库到示例
 target_link_libraries(line_json_demo LineReader GenericJsonContainer)
 
+# 创建忽略字段功能演示可执行文件
+add_executable(ignore_fields_demo example/ignore_fields_demo.cpp)
+
+# 链接GenericJsonContainer库到忽略字段演示
+target_link_libraries(ignore_fields_demo GenericJsonContainer)
+
 # 为不同构建类型设置编译选项
 target_compile_options(json_example PRIVATE
     $<$<CONFIG:Debug>:-g -O0>
@@ -154,6 +160,11 @@ target_compile_options(line_json_demo PRIVATE
     $<$<CONFIG:Release>:-O3 -DNDEBUG>
 )
 
+target_compile_options(ignore_fields_demo PRIVATE
+    $<$<CONFIG:Debug>:-g -O0>
+    $<$<CONFIG:Release>:-O3 -DNDEBUG>
+)
+
 # 如果是Debug模式，添加调试信息
 if(CMAKE_BUILD_TYPE STREQUAL "Debug")
     target_compile_definitions(json_example PRIVATE DEBUG)
@@ -161,10 +172,11 @@ if(CMAKE_BUILD_TYPE STREQUAL "Debug")
     target_compile_definitions(market_demo PRIVATE DEBUG)
     target_compile_definitions(generic_demo PRIVATE DEBUG)
     target_compile_definitions(line_json_demo PRIVATE DEBUG)
+    target_compile_definitions(ignore_fields_demo PRIVATE DEBUG)
 endif()
 
 # 安装规则（可选）
-install(TARGETS JsonParser LineReader MarketData GenericJsonContainer json_example line_reader_demo market_demo generic_demo line_json_demo
+install(TARGETS JsonParser LineReader MarketData GenericJsonContainer json_example line_reader_demo market_demo generic_demo line_json_demo ignore_fields_demo
     ARCHIVE DESTINATION lib
     LIBRARY DESTINATION lib
     RUNTIME DESTINATION bin
@@ -181,6 +193,7 @@ add_test(NAME line_reader_test COMMAND line_reader_demo)
 add_test(NAME market_data_test COMMAND market_demo)
 add_test(NAME generic_container_test COMMAND generic_demo)
 add_test(NAME line_json_demo_test COMMAND line_json_demo)
+add_test(NAME ignore_fields_demo_test COMMAND ignore_fields_demo)
 
 # 打印配置信息
 message(STATUS "Project: ${PROJECT_NAME}")

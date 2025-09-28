@@ -3,6 +3,7 @@
 #include <fstream>
 #include <algorithm>
 #include <iomanip>
+#include <set>
 
 // ==================== CustomValue 实现 ====================
 
@@ -479,6 +480,41 @@ bool GenericJsonContainer::parseFromJsonParser(const JsonParser& parser) {
     }
 }
 
+// 从JSON字符串解析（支持忽略指定字段）
+bool GenericJsonContainer::parseFromJsonString(const std::string& jsonStr, const std::string& ignore_fields) {
+    try {
+        JsonParser parser(jsonStr);
+        return parseFromJsonParser(parser, ignore_fields);
+    } catch (const JsonParseException& e) {
+        std::cerr << "JSON解析错误: " << e.what() << std::endl;
+        return false;
+    }
+}
+
+// 从JsonParser解析（支持忽略指定字段）
+bool GenericJsonContainer::parseFromJsonParser(const JsonParser& parser, const std::string& ignore_fields) {
+    try {
+        data_.clear();
+        auto root = parser.getRoot();
+
+        if (root.isObject()) {
+            // 解析忽略字段集合
+            std::set<std::string> ignoreFieldsSet = parseIgnoreFields(ignore_fields);
+            parseJsonObject(root, data_, ignoreFieldsSet);
+            return true;
+        } else {
+            std::cerr << "根节点不是JSON对象" << std::endl;
+            return false;
+        }
+    } catch (const JsonParseException& e) {
+        std::cerr << "解析错误: " << e.what() << std::endl;
+        return false;
+    } catch (const GenericJsonException& e) {
+        std::cerr << "通用JSON错误: " << e.what() << std::endl;
+        return false;
+    }
+}
+
 // 解析JSON值
 CustomValue GenericJsonContainer::parseJsonValue(const JsonValue& jsonValue) {
     if (jsonValue.isNull()) {
@@ -854,4 +890,91 @@ bool JsonContainerCollection::exportAllToJson(const std::string& filename) const
     file.close();
     std::cout << "成功导出 " << containers_.size() << " 个容器到: " << filename << std::endl;
     return true;
+}
+
+// ==================== 字段忽略功能实现 ====================
+
+// 解析忽略字段字符串，将"key1,key2,key3"格式转换为set<string>
+std::set<std::string> GenericJsonContainer::parseIgnoreFields(const std::string& ignore_fields) const {
+    std::set<std::string> result;
+
+    if (ignore_fields.empty()) {
+        return result;  // 空字符串返回空集合
+    }
+
+    std::stringstream ss(ignore_fields);
+    std::string field;
+
+    // 使用逗号分割字符串
+    while (std::getline(ss, field, ',')) {
+        // 移除字段名两端的空白字符
+        size_t start = field.find_first_not_of(" \t\r\n");
+        size_t end = field.find_last_not_of(" \t\r\n");
+
+        if (start != std::string::npos && end != std::string::npos) {
+            std::string trimmedField = field.substr(start, end - start + 1);
+            if (!trimmedField.empty()) {
+                result.insert(trimmedField);
+            }
+        }
+    }
+
+    return result;
+}
+
+// 支持忽略字段的JSON值解析
+CustomValue GenericJsonContainer::parseJsonValue(const JsonValue& jsonValue, const std::set<std::string>& ignoreFields) {
+    if (jsonValue.isNull()) {
+        return CustomValue::createNull();
+    } else if (jsonValue.isBool()) {
+        return CustomValue(jsonValue.asBool());
+    } else if (jsonValue.isInt()) {
+        return CustomValue(static_cast<int64_t>(jsonValue.asInt()));
+    } else if (jsonValue.isDouble()) {
+        return CustomValue(jsonValue.asDouble());
+    } else if (jsonValue.isString()) {
+        return CustomValue(jsonValue.asString());
+    } else if (jsonValue.isArray()) {
+        JsonArrayData arrayData;
+        parseJsonArray(jsonValue, arrayData, ignoreFields);
+        return CustomValue(arrayData);
+    } else if (jsonValue.isObject()) {
+        JsonObjectData objectData;
+        parseJsonObject(jsonValue, objectData, ignoreFields);
+        return CustomValue(objectData);
+    } else {
+        return CustomValue::createNull();
+    }
+}
+
+// 支持忽略字段的JSON对象解析
+void GenericJsonContainer::parseJsonObject(const JsonValue& jsonObj, JsonObjectData& data, const std::set<std::string>& ignoreFields) {
+    if (!jsonObj.isObject()) {
+        throw GenericJsonException("值不是JSON对象");
+    }
+
+    auto keys = jsonObj.getKeys();
+    for (const auto& key : keys) {
+        // 检查键是否在忽略列表中
+        if (ignoreFields.find(key) != ignoreFields.end()) {
+            continue;  // 跳过这个字段
+        }
+
+        auto value = jsonObj[key];
+        CustomValue customValue = parseJsonValue(value, ignoreFields);
+        data.push_back(std::make_pair(key, customValue));
+    }
+}
+
+// 支持忽略字段的JSON数组解析
+void GenericJsonContainer::parseJsonArray(const JsonValue& jsonArray, JsonArrayData& data, const std::set<std::string>& ignoreFields) {
+    if (!jsonArray.isArray()) {
+        throw GenericJsonException("值不是JSON数组");
+    }
+
+    for (size_t i = 0; i < jsonArray.arraySize(); ++i) {
+        auto element = jsonArray[i];
+        CustomValue customValue = parseJsonValue(element, ignoreFields);
+        data.push_back(customValue);
+    }
 }

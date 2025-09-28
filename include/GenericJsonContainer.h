@@ -6,6 +6,7 @@
 #include <stdexcept>
 #include <iostream>
 #include <iomanip>
+#include <set>
 #include "JsonParser.h"
 
 // JSON值类型枚举
@@ -141,8 +142,14 @@ public:
     // 从JSON字符串解析
     bool parseFromJsonString(const std::string& jsonStr);
 
+    // 从JSON字符串解析（支持忽略指定字段）
+    bool parseFromJsonString(const std::string& jsonStr, const std::string& ignore_fields);
+
     // 从JsonParser解析
     bool parseFromJsonParser(const JsonParser& parser);
+
+    // 从JsonParser解析（支持忽略指定字段）
+    bool parseFromJsonParser(const JsonParser& parser, const std::string& ignore_fields);
 
     // 数据访问方法
     size_t size() const { return data_.size(); }
@@ -203,8 +210,14 @@ public:
 private:
     // 内部辅助方法
     CustomValue parseJsonValue(const JsonValue& jsonValue);
+    CustomValue parseJsonValue(const JsonValue& jsonValue, const std::set<std::string>& ignoreFields);
     void parseJsonObject(const JsonValue& jsonObj, JsonObjectData& data);
+    void parseJsonObject(const JsonValue& jsonObj, JsonObjectData& data, const std::set<std::string>& ignoreFields);
     void parseJsonArray(const JsonValue& jsonArray, JsonArrayData& data);
+    void parseJsonArray(const JsonValue& jsonArray, JsonArrayData& data, const std::set<std::string>& ignoreFields);
+
+    // 字段忽略相关辅助方法
+    std::set<std::string> parseIgnoreFields(const std::string& ignore_fields) const;
 
     // 查找键的内部方法
     JsonObjectData::iterator findKey(const std::string& key);
