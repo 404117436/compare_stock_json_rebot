@@ -17,6 +17,7 @@ private:
     std::string filePath_;                           // 文件路径
     std::unique_ptr<LineReader> lineReader_;         // 行读取器
     size_t maxMemorySize_;                           // 内存软上限（字节）
+    int64_t index_decimal_;                          // 索引精度控制，默认1
 
     // 临界数据处理
     StockDataContainer pendingData_;                 // 缓存的临界数据
@@ -27,7 +28,9 @@ private:
 
 public:
     // 构造函数
-    StockDataBatchReader(const std::string& filePath, size_t maxMemorySize = 1024 * 1024); // 默认1MB
+    StockDataBatchReader(const std::string& filePath,
+                        size_t maxMemorySize = 1024 * 1024,
+                        int64_t indexDecimal = 1); // 默认1MB内存，精度为1
 
     // 禁用拷贝
     StockDataBatchReader(const StockDataBatchReader&) = delete;
@@ -45,4 +48,9 @@ public:
     bool isEmpty() const { return dataQueue_.empty(); }
     std::string getFilePath() const { return filePath_; }
     size_t getCurrentMemoryUsage() const;                                  // 计算当前内存使用
+
+    // 精度控制
+    int64_t getIndexDecimal() const { return index_decimal_; }            // 获取索引精度
+    void setIndexDecimal(int64_t decimal);                                // 设置索引精度
+    int64_t convertIndexToComparableValue(const std::string& indexValue) const;   // 公开转换方法供测试使用
 };

@@ -182,6 +182,18 @@ add_executable(batch_reader_demo example/batch_reader_demo.cpp)
 # 链接StockDataBatchReader库到批次读取器演示
 target_link_libraries(batch_reader_demo StockDataBatchReader)
 
+# 创建数值索引功能演示可执行文件
+add_executable(numeric_index_demo example/numeric_index_demo.cpp)
+
+# 链接StockDataBatchReader库到数值索引演示
+target_link_libraries(numeric_index_demo StockDataBatchReader)
+
+# 创建比较一致性验证可执行文件
+add_executable(comparison_consistency_test example/comparison_consistency_test.cpp)
+
+# 链接StockDataBatchReader库到比较一致性验证
+target_link_libraries(comparison_consistency_test StockDataBatchReader)
+
 # 为不同构建类型设置编译选项
 target_compile_options(json_example PRIVATE
     $<$<CONFIG:Debug>:-g -O0>
@@ -223,6 +235,16 @@ target_compile_options(batch_reader_demo PRIVATE
     $<$<CONFIG:Release>:-O3 -DNDEBUG>
 )
 
+target_compile_options(numeric_index_demo PRIVATE
+    $<$<CONFIG:Debug>:-g -O0>
+    $<$<CONFIG:Release>:-O3 -DNDEBUG>
+)
+
+target_compile_options(comparison_consistency_test PRIVATE
+    $<$<CONFIG:Debug>:-g -O0>
+    $<$<CONFIG:Release>:-O3 -DNDEBUG>
+)
+
 # 如果是Debug模式，添加调试信息
 if(CMAKE_BUILD_TYPE STREQUAL "Debug")
     target_compile_definitions(json_example PRIVATE DEBUG)
@@ -233,10 +255,12 @@ if(CMAKE_BUILD_TYPE STREQUAL "Debug")
     target_compile_definitions(ignore_fields_demo PRIVATE DEBUG)
     target_compile_definitions(stock_data_demo PRIVATE DEBUG)
     target_compile_definitions(batch_reader_demo PRIVATE DEBUG)
+    target_compile_definitions(numeric_index_demo PRIVATE DEBUG)
+    target_compile_definitions(comparison_consistency_test PRIVATE DEBUG)
 endif()
 
 # 安装规则（可选）
-install(TARGETS JsonParser LineReader MarketData GenericJsonContainer StockDataContainer StockDataBatchReader json_example line_reader_demo market_demo generic_demo line_json_demo ignore_fields_demo stock_data_demo batch_reader_demo
+install(TARGETS JsonParser LineReader MarketData GenericJsonContainer StockDataContainer StockDataBatchReader json_example line_reader_demo market_demo generic_demo line_json_demo ignore_fields_demo stock_data_demo batch_reader_demo numeric_index_demo comparison_consistency_test
     ARCHIVE DESTINATION lib
     LIBRARY DESTINATION lib
     RUNTIME DESTINATION bin
@@ -256,6 +280,8 @@ add_test(NAME line_json_demo_test COMMAND line_json_demo)
 add_test(NAME ignore_fields_demo_test COMMAND ignore_fields_demo)
 add_test(NAME stock_data_demo_test COMMAND stock_data_demo)
 add_test(NAME batch_reader_demo_test COMMAND batch_reader_demo)
+add_test(NAME numeric_index_demo_test COMMAND numeric_index_demo)
+add_test(NAME comparison_consistency_test COMMAND comparison_consistency_test)
 
 # 打印配置信息
 message(STATUS "Project: ${PROJECT_NAME}")
