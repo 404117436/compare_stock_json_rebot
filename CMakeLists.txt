@@ -98,6 +98,24 @@ target_compile_features(GenericJsonContainer PUBLIC cxx_std_11)
 # GenericJsonContainer库依赖JsonParser库
 target_link_libraries(GenericJsonContainer JsonParser)
 
+# 创建StockDataContainer静态库
+add_library(StockDataContainer STATIC
+    src/StockDataContainer.cpp
+    include/StockDataContainer.h
+)
+
+# 设置StockDataContainer库的包含目录
+target_include_directories(StockDataContainer PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+    $<INSTALL_INTERFACE:include>
+)
+
+# 设置StockDataContainer库的C++标准
+target_compile_features(StockDataContainer PUBLIC cxx_std_11)
+
+# StockDataContainer库依赖GenericJsonContainer库
+target_link_libraries(StockDataContainer GenericJsonContainer)
+
 # 创建JsonParser示例可执行文件
 add_executable(json_example example/main.cpp)
 
@@ -134,6 +152,12 @@ add_executable(ignore_fields_demo example/ignore_fields_demo.cpp)
 # 链接GenericJsonContainer库到忽略字段演示
 target_link_libraries(ignore_fields_demo GenericJsonContainer)
 
+# 创建股票数据容器演示可执行文件
+add_executable(stock_data_demo example/stock_data_demo.cpp)
+
+# 链接StockDataContainer库到股票数据演示
+target_link_libraries(stock_data_demo StockDataContainer)
+
 # 为不同构建类型设置编译选项
 target_compile_options(json_example PRIVATE
     $<$<CONFIG:Debug>:-g -O0>
@@ -165,6 +189,11 @@ target_compile_options(ignore_fields_demo PRIVATE
     $<$<CONFIG:Release>:-O3 -DNDEBUG>
 )
 
+target_compile_options(stock_data_demo PRIVATE
+    $<$<CONFIG:Debug>:-g -O0>
+    $<$<CONFIG:Release>:-O3 -DNDEBUG>
+)
+
 # 如果是Debug模式，添加调试信息
 if(CMAKE_BUILD_TYPE STREQUAL "Debug")
     target_compile_definitions(json_example PRIVATE DEBUG)
@@ -173,10 +202,11 @@ if(CMAKE_BUILD_TYPE STREQUAL "Debug")
     target_compile_definitions(generic_demo PRIVATE DEBUG)
     target_compile_definitions(line_json_demo PRIVATE DEBUG)
     target_compile_definitions(ignore_fields_demo PRIVATE DEBUG)
+    target_compile_definitions(stock_data_demo PRIVATE DEBUG)
 endif()
 
 # 安装规则（可选）
-install(TARGETS JsonParser LineReader MarketData GenericJsonContainer json_example line_reader_demo market_demo generic_demo line_json_demo ignore_fields_demo
+install(TARGETS JsonParser LineReader MarketData GenericJsonContainer StockDataContainer json_example line_reader_demo market_demo generic_demo line_json_demo ignore_fields_demo stock_data_demo
     ARCHIVE DESTINATION lib
     LIBRARY DESTINATION lib
     RUNTIME DESTINATION bin
@@ -194,6 +224,7 @@ add_test(NAME market_data_test COMMAND market_demo)
 add_test(NAME generic_container_test COMMAND generic_demo)
 add_test(NAME line_json_demo_test COMMAND line_json_demo)
 add_test(NAME ignore_fields_demo_test COMMAND ignore_fields_demo)
+add_test(NAME stock_data_demo_test COMMAND stock_data_demo)
 
 # 打印配置信息
 message(STATUS "Project: ${PROJECT_NAME}")

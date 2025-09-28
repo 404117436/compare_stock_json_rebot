@@ -139,11 +139,14 @@ public:
     GenericJsonContainer();
     explicit GenericJsonContainer(const std::string& source);
 
+    // 虚析构函数（因为有virtual方法）
+    virtual ~GenericJsonContainer() = default;
+
     // 从JSON字符串解析
-    bool parseFromJsonString(const std::string& jsonStr);
+    virtual bool parseFromJsonString(const std::string& jsonStr);
 
     // 从JSON字符串解析（支持忽略指定字段）
-    bool parseFromJsonString(const std::string& jsonStr, const std::string& ignore_fields);
+    virtual bool parseFromJsonString(const std::string& jsonStr, const std::string& ignore_fields);
 
     // 从JsonParser解析
     bool parseFromJsonParser(const JsonParser& parser);
