@@ -1,1 +1,0 @@
-/usr/bin/c++ -O3 -DNDEBUG CMakeFiles/generic_demo.dir/example/generic_demo.cpp.o -o generic_demo  libGenericJsonContainer.a libJsonParser.a 

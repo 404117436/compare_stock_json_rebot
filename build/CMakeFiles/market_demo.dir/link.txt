@@ -1,1 +1,0 @@
-/usr/bin/c++ -O3 -DNDEBUG CMakeFiles/market_demo.dir/example/market_demo.cpp.o -o market_demo  libMarketData.a libJsonParser.a 

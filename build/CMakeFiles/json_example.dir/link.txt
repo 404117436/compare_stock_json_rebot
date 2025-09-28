@@ -1,1 +1,0 @@
-/usr/bin/c++ -O3 -DNDEBUG CMakeFiles/json_example.dir/example/main.cpp.o -o json_example  libJsonParser.a 

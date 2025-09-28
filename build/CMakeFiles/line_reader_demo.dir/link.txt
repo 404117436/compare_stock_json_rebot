@@ -1,1 +1,0 @@
-/usr/bin/c++ -O3 -DNDEBUG CMakeFiles/line_reader_demo.dir/example/demo.cpp.o -o line_reader_demo  libLineReader.a 

@@ -1,2 +1,0 @@
-/usr/bin/ar qc libMarketData.a CMakeFiles/MarketData.dir/src/MarketData.cpp.o
-/usr/bin/ranlib libMarketData.a

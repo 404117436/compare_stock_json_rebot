@@ -1,5 +1,0 @@
-{
-    "app": "JsonParser测试",
-    "version": "1.0.0",
-    "features": ["简单易用", "类型安全", "C++11支持"]
-}
