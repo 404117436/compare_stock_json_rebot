@@ -236,6 +236,12 @@ add_executable(simple_test example/simple_test.cpp)
 # 链接StockDataComparator库到简单测试
 target_link_libraries(simple_test StockDataComparator)
 
+# 创建JSON文件比较演示可执行文件
+add_executable(json_file_comparison_demo example/json_file_comparison_demo.cpp)
+
+# 链接所需库到JSON文件比较演示
+target_link_libraries(json_file_comparison_demo StockDataComparator StockDataBatchReader)
+
 # 为不同构建类型设置编译选项
 target_compile_options(json_example PRIVATE
     $<$<CONFIG:Debug>:-g -O0>
@@ -307,6 +313,11 @@ target_compile_options(simple_test PRIVATE
     $<$<CONFIG:Release>:-O3 -DNDEBUG>
 )
 
+target_compile_options(json_file_comparison_demo PRIVATE
+    $<$<CONFIG:Debug>:-g -O0>
+    $<$<CONFIG:Release>:-O3 -DNDEBUG>
+)
+
 # 如果是Debug模式，添加调试信息
 if(CMAKE_BUILD_TYPE STREQUAL "Debug")
     target_compile_definitions(json_example PRIVATE DEBUG)
@@ -323,10 +334,11 @@ if(CMAKE_BUILD_TYPE STREQUAL "Debug")
     target_compile_definitions(field_boundary_test PRIVATE DEBUG)
     target_compile_definitions(detailed_diff_test PRIVATE DEBUG)
     target_compile_definitions(simple_test PRIVATE DEBUG)
+    target_compile_definitions(json_file_comparison_demo PRIVATE DEBUG)
 endif()
 
 # 安装规则（可选）
-install(TARGETS JsonParser LineReader MarketData GenericJsonContainer StockDataContainer StockDataBatchReader StockDataComparator json_example line_reader_demo market_demo generic_demo line_json_demo ignore_fields_demo stock_data_demo batch_reader_demo numeric_index_demo comparison_consistency_test stock_comparator_demo field_boundary_test detailed_diff_test simple_test
+install(TARGETS JsonParser LineReader MarketData GenericJsonContainer StockDataContainer StockDataBatchReader StockDataComparator json_example line_reader_demo market_demo generic_demo line_json_demo ignore_fields_demo stock_data_demo batch_reader_demo numeric_index_demo comparison_consistency_test stock_comparator_demo field_boundary_test detailed_diff_test simple_test json_file_comparison_demo
     ARCHIVE DESTINATION lib
     LIBRARY DESTINATION lib
     RUNTIME DESTINATION bin
@@ -352,6 +364,7 @@ add_test(NAME stock_comparator_demo_test COMMAND stock_comparator_demo)
 add_test(NAME field_boundary_test COMMAND field_boundary_test)
 add_test(NAME detailed_diff_test COMMAND detailed_diff_test)
 add_test(NAME simple_test COMMAND simple_test)
+add_test(NAME json_file_comparison_demo_test COMMAND json_file_comparison_demo)
 
 # 打印配置信息
 message(STATUS "Project: ${PROJECT_NAME}")
