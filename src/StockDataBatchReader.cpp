@@ -2,8 +2,8 @@
 #include <iostream>
 
 // 构造函数
-StockDataBatchReader::StockDataBatchReader(const std::string& filePath, size_t maxMemorySize, int64_t indexDecimal)
-    : filePath_(filePath), maxMemorySize_(maxMemorySize), index_decimal_(indexDecimal), hasPendingData_(false) {
+StockDataBatchReader::StockDataBatchReader(const std::string& filePath, const std::string& indexKey, size_t maxMemorySize, int64_t indexDecimal)
+    : filePath_(filePath), maxMemorySize_(maxMemorySize), index_decimal_(indexDecimal), indexKey_(indexKey), hasPendingData_(false) {
 
     try {
         lineReader_ = std::unique_ptr<LineReader>(new LineReader(filePath_));
@@ -14,7 +14,7 @@ StockDataBatchReader::StockDataBatchReader(const std::string& filePath, size_t m
 }
 
 // 读取下一批次
-size_t StockDataBatchReader::readNextBatch(const std::string& indexKey) {
+size_t StockDataBatchReader::readNextBatch() {
     if (!lineReader_ || !lineReader_->isOpen()) {
         return 0;
     }
@@ -25,7 +25,7 @@ size_t StockDataBatchReader::readNextBatch(const std::string& indexKey) {
 
     // 1. 优先处理临界数据
     if (hasPendingData_) {
-        pendingData_.setIndexKey(indexKey);  // 确保使用正确的索引字段
+        pendingData_.setIndexKey(indexKey_);  // 确保使用正确的索引字段
         currentBatchValue = convertIndexToComparableValue(pendingData_.getIndexValue());
         dataQueue_.push_back(std::move(pendingData_));
         hasPendingData_ = false;
@@ -35,7 +35,7 @@ size_t StockDataBatchReader::readNextBatch(const std::string& indexKey) {
 
     // 2. 循环读取数据
     StockDataContainer newData;
-    while (readSingleRecord(newData, indexKey)) {
+    while (readSingleRecord(newData)) {
         int64_t newIndexValue = convertIndexToComparableValue(newData.getIndexValue());
 
         // 检查是否开始新批次
@@ -65,7 +65,7 @@ size_t StockDataBatchReader::readNextBatch(const std::string& indexKey) {
 }
 
 // 读取单条记录
-bool StockDataBatchReader::readSingleRecord(StockDataContainer& container, const std::string& indexKey) {
+bool StockDataBatchReader::readSingleRecord(StockDataContainer& container) {
     if (!lineReader_->hasNextLine()) {
         return false;
     }
@@ -75,18 +75,18 @@ bool StockDataBatchReader::readSingleRecord(StockDataContainer& container, const
 
         // 跳过空行
         if (jsonLine.empty() || jsonLine.find_first_not_of(" \t\r\n") == std::string::npos) {
-            return readSingleRecord(container, indexKey);  // 递归处理下一行
+            return readSingleRecord(container);  // 递归处理下一行
         }
 
         // 创建新容器并设置索引字段
-        container = StockDataContainer("BatchData", indexKey);
+        container = StockDataContainer("BatchData", indexKey_);
 
         // 解析JSON
         if (container.parseFromJsonString(jsonLine)) {
             return true;
         } else {
             // 解析失败，尝试下一行
-            return readSingleRecord(container, indexKey);
+            return readSingleRecord(container);
         }
 
     } catch (const std::exception& e) {
@@ -123,12 +123,24 @@ size_t StockDataBatchReader::getCurrentMemoryUsage() const {
 }
 
 // 取出当前批次
-std::vector<StockDataContainer> StockDataBatchReader::popBatch() {
+bool StockDataBatchReader::popBatch(std::vector<StockDataContainer>& result) {
+    // 清空输出参数
+    result.clear();
+
+    // 1. 当deque为空时调用readNextBatch补充数据
     if (dataQueue_.empty()) {
-        return {};
+        size_t readCount = readNextBatch();
+        if (readCount == 0) {
+            return false; // 没有更多数据可读
+        }
     }
 
-    std::vector<StockDataContainer> result;
+    // 2. 如果仍然为空，返回失败
+    if (dataQueue_.empty()) {
+        return false;
+    }
+
+    // 3. 执行原有的批次提取逻辑
     int64_t currentBatchValue = convertIndexToComparableValue(dataQueue_.front().getIndexValue());
 
     // 只取出index_value_相同的连续数据
@@ -138,7 +150,7 @@ std::vector<StockDataContainer> StockDataBatchReader::popBatch() {
         dataQueue_.pop_front();
     }
 
-    return result;
+    return true; // 成功获取批次
 }
 
 // 获取批次（拷贝）

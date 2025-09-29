@@ -36,14 +36,14 @@ void demonstrateBatchReading(const std::string& filename) {
 
     try {
         // 创建批次读取器，设置较小的内存限制便于测试
-        StockDataBatchReader reader(filename, 1024);  // 1KB内存限制
+        StockDataBatchReader reader(filename, "time", 1024);  // 1KB内存限制
 
         size_t batchNumber = 1;
         std::string indexKey = "time";  // 按时间字段分组
 
         while (true) {
             // 读取下一批次
-            size_t recordsRead = reader.readNextBatch(indexKey);
+            size_t recordsRead = reader.readNextBatch();
 
             if (recordsRead == 0) {
                 std::cout << "✓ 所有数据读取完成" << std::endl;
@@ -59,7 +59,10 @@ void demonstrateBatchReading(const std::string& filename) {
                 std::cout << "✓ 发现完整批次" << std::endl;
 
                 // 获取批次数据
-                auto batch = reader.popBatch();
+                std::vector<StockDataContainer> batch;
+                if (!reader.popBatch(batch)) {
+                    break; // 无法获取批次，结束循环
+                }
                 std::cout << "批次大小: " << batch.size() << " 条记录" << std::endl;
 
                 if (!batch.empty()) {
@@ -102,9 +105,9 @@ void demonstrateDifferentIndexFields(const std::string& filename) {
     try {
         // 按价格分组
         std::cout << "\n--- 按价格字段分组 ---" << std::endl;
-        StockDataBatchReader priceReader(filename, 2048);
+        StockDataBatchReader priceReader(filename, "new_price", 2048);
 
-        size_t recordsRead = priceReader.readNextBatch("new_price");
+        size_t recordsRead = priceReader.readNextBatch();
         std::cout << "按价格读取记录数: " << recordsRead << std::endl;
 
         if (priceReader.hasCompleteBatch()) {
@@ -120,9 +123,9 @@ void demonstrateDifferentIndexFields(const std::string& filename) {
 
         // 按市场分组
         std::cout << "\n--- 按市场字段分组 ---" << std::endl;
-        StockDataBatchReader marketReader(filename, 2048);
+        StockDataBatchReader marketReader(filename, "market", 2048);
 
-        recordsRead = marketReader.readNextBatch("market");
+        recordsRead = marketReader.readNextBatch();
         std::cout << "按市场读取记录数: " << recordsRead << std::endl;
 
         if (marketReader.hasCompleteBatch()) {
@@ -147,7 +150,7 @@ void demonstrateMemoryLimit(const std::string& filename) {
 
     try {
         // 创建内存限制很小的读取器
-        StockDataBatchReader smallReader(filename, 500);  // 500字节限制
+        StockDataBatchReader smallReader(filename, "time", 500);  // 500字节限制
 
         std::cout << "内存限制: 500字节" << std::endl;
 
@@ -155,7 +158,7 @@ void demonstrateMemoryLimit(const std::string& filename) {
         size_t batchCount = 0;
 
         while (true) {
-            size_t recordsRead = smallReader.readNextBatch("time");
+            size_t recordsRead = smallReader.readNextBatch();
             if (recordsRead == 0) break;
 
             totalRecords += recordsRead;
@@ -166,8 +169,10 @@ void demonstrateMemoryLimit(const std::string& filename) {
                       << " 字节" << std::endl;
 
             if (smallReader.hasCompleteBatch()) {
-                auto batch = smallReader.popBatch();
-                std::cout << "  导出批次: " << batch.size() << " 条记录" << std::endl;
+                std::vector<StockDataContainer> batch;
+                if (smallReader.popBatch(batch)) {
+                    std::cout << "  导出批次: " << batch.size() << " 条记录" << std::endl;
+                }
             }
 
             if (batchCount > 20) break;  // 防止无限循环
@@ -185,7 +190,7 @@ void demonstrateCompleteWorkflow(const std::string& filename) {
     std::cout << "\n=== 完整工作流程演示 ===" << std::endl;
 
     try {
-        StockDataBatchReader reader(filename, 1024);
+        StockDataBatchReader reader(filename, "time", 1024);
 
         std::vector<std::vector<StockDataContainer>> allBatches;
         size_t totalRecords = 0;
@@ -194,14 +199,17 @@ void demonstrateCompleteWorkflow(const std::string& filename) {
 
         while (true) {
             // 读取下一批次
-            size_t recordsRead = reader.readNextBatch("time");
+            size_t recordsRead = reader.readNextBatch();
             if (recordsRead == 0) break;
 
             totalRecords += recordsRead;
 
             // 处理完整批次
             while (reader.hasCompleteBatch()) {
-                auto batch = reader.popBatch();
+                std::vector<StockDataContainer> batch;
+                if (!reader.popBatch(batch)) {
+                    break; // 无法获取批次，结束循环
+                }
                 allBatches.push_back(std::move(batch));
 
                 std::cout << "处理批次 " << allBatches.size()
@@ -211,8 +219,8 @@ void demonstrateCompleteWorkflow(const std::string& filename) {
 
         // 处理最后一个批次（如果有）
         if (!reader.isEmpty()) {
-            auto lastBatch = reader.popBatch();
-            if (!lastBatch.empty()) {
+            std::vector<StockDataContainer> lastBatch;
+            if (reader.popBatch(lastBatch) && !lastBatch.empty()) {
                 allBatches.push_back(std::move(lastBatch));
                 std::cout << "处理最后批次: " << allBatches.back().size() << " 条记录" << std::endl;
             }

@@ -18,17 +18,19 @@ private:
     std::unique_ptr<LineReader> lineReader_;         // 行读取器
     size_t maxMemorySize_;                           // 内存软上限（字节）
     int64_t index_decimal_;                          // 索引精度控制，默认1
+    std::string indexKey_;                           // 索引字段名称
 
     // 临界数据处理
     StockDataContainer pendingData_;                 // 缓存的临界数据
     bool hasPendingData_;                           // 是否有待处理数据
 
     // 内部辅助方法
-    bool readSingleRecord(StockDataContainer& container, const std::string& indexKey); // 读取单条记录
+    bool readSingleRecord(StockDataContainer& container); // 读取单条记录
 
 public:
     // 构造函数
     StockDataBatchReader(const std::string& filePath,
+                        const std::string& indexKey = "time",   // 默认使用time作为索引字段
                         size_t maxMemorySize = 1024 * 1024,
                         int64_t indexDecimal = 1); // 默认1MB内存，精度为1
 
@@ -37,8 +39,8 @@ public:
     StockDataBatchReader& operator=(const StockDataBatchReader&) = delete;
 
     // 核心接口
-    size_t readNextBatch(const std::string& indexKey);              // 读取下一批次
-    std::vector<StockDataContainer> popBatch();                     // 取出当前批次
+    size_t readNextBatch();                                         // 读取下一批次
+    bool popBatch(std::vector<StockDataContainer>& result);         // 取出当前批次
     std::vector<StockDataContainer> getBatch() const;               // 获取批次（拷贝）
     bool hasCompleteBatch() const;                                  // 检查是否有完整批次
     void clearBatch();                                              // 清空批次
@@ -53,4 +55,8 @@ public:
     int64_t getIndexDecimal() const { return index_decimal_; }            // 获取索引精度
     void setIndexDecimal(int64_t decimal);                                // 设置索引精度
     int64_t convertIndexToComparableValue(const std::string& indexValue) const;   // 公开转换方法供测试使用
+
+    // 索引字段控制
+    const std::string& getIndexKey() const { return indexKey_; }          // 获取索引字段名
+    void setIndexKey(const std::string& indexKey) { indexKey_ = indexKey; } // 设置索引字段名
 };
