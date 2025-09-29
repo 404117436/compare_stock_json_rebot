@@ -48,4 +48,9 @@ public:
 
     // 基本信息输出
     void printStockInfo() const;
+
+    // 字段存在性和访问方法（用于比较器）
+    bool hasField(const std::string& fieldName) const;                     // 检查字段是否存在
+    std::vector<std::string> getFieldNames() const;                        // 获取所有字段名
+    CustomValue getFieldSafe(const std::string& fieldName) const;          // 安全获取字段值
 };

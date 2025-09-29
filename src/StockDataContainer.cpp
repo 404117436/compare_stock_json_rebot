@@ -159,3 +159,19 @@ void StockDataContainer::printStockInfo() const {
 
     std::cout << std::endl;
 }
+
+// 字段存在性和访问方法实现
+bool StockDataContainer::hasField(const std::string& fieldName) const {
+    return hasKey(fieldName);  // 使用继承的hasKey方法
+}
+
+std::vector<std::string> StockDataContainer::getFieldNames() const {
+    return getAllKeys();  // 使用继承的getAllKeys方法
+}
+
+CustomValue StockDataContainer::getFieldSafe(const std::string& fieldName) const {
+    if (hasField(fieldName)) {
+        return getValue(fieldName);  // 使用继承的getValue方法
+    }
+    return CustomValue();  // 返回null类型的CustomValue
+}
