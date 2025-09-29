@@ -218,6 +218,24 @@ add_executable(stock_comparator_demo example/stock_comparator_demo.cpp)
 # 链接StockDataComparator库到股票数据比较器演示
 target_link_libraries(stock_comparator_demo StockDataComparator)
 
+# 创建字段边界条件测试可执行文件
+add_executable(field_boundary_test example/field_boundary_test.cpp)
+
+# 链接StockDataComparator库到字段边界条件测试
+target_link_libraries(field_boundary_test StockDataComparator)
+
+# 创建详细差异功能测试可执行文件
+add_executable(detailed_diff_test example/detailed_diff_test.cpp)
+
+# 链接StockDataComparator库到详细差异功能测试
+target_link_libraries(detailed_diff_test StockDataComparator)
+
+# 创建简单测试可执行文件
+add_executable(simple_test example/simple_test.cpp)
+
+# 链接StockDataComparator库到简单测试
+target_link_libraries(simple_test StockDataComparator)
+
 # 为不同构建类型设置编译选项
 target_compile_options(json_example PRIVATE
     $<$<CONFIG:Debug>:-g -O0>
@@ -274,6 +292,21 @@ target_compile_options(stock_comparator_demo PRIVATE
     $<$<CONFIG:Release>:-O3 -DNDEBUG>
 )
 
+target_compile_options(field_boundary_test PRIVATE
+    $<$<CONFIG:Debug>:-g -O0>
+    $<$<CONFIG:Release>:-O3 -DNDEBUG>
+)
+
+target_compile_options(detailed_diff_test PRIVATE
+    $<$<CONFIG:Debug>:-g -O0>
+    $<$<CONFIG:Release>:-O3 -DNDEBUG>
+)
+
+target_compile_options(simple_test PRIVATE
+    $<$<CONFIG:Debug>:-g -O0>
+    $<$<CONFIG:Release>:-O3 -DNDEBUG>
+)
+
 # 如果是Debug模式，添加调试信息
 if(CMAKE_BUILD_TYPE STREQUAL "Debug")
     target_compile_definitions(json_example PRIVATE DEBUG)
@@ -287,10 +320,13 @@ if(CMAKE_BUILD_TYPE STREQUAL "Debug")
     target_compile_definitions(numeric_index_demo PRIVATE DEBUG)
     target_compile_definitions(comparison_consistency_test PRIVATE DEBUG)
     target_compile_definitions(stock_comparator_demo PRIVATE DEBUG)
+    target_compile_definitions(field_boundary_test PRIVATE DEBUG)
+    target_compile_definitions(detailed_diff_test PRIVATE DEBUG)
+    target_compile_definitions(simple_test PRIVATE DEBUG)
 endif()
 
 # 安装规则（可选）
-install(TARGETS JsonParser LineReader MarketData GenericJsonContainer StockDataContainer StockDataBatchReader StockDataComparator json_example line_reader_demo market_demo generic_demo line_json_demo ignore_fields_demo stock_data_demo batch_reader_demo numeric_index_demo comparison_consistency_test stock_comparator_demo
+install(TARGETS JsonParser LineReader MarketData GenericJsonContainer StockDataContainer StockDataBatchReader StockDataComparator json_example line_reader_demo market_demo generic_demo line_json_demo ignore_fields_demo stock_data_demo batch_reader_demo numeric_index_demo comparison_consistency_test stock_comparator_demo field_boundary_test detailed_diff_test simple_test
     ARCHIVE DESTINATION lib
     LIBRARY DESTINATION lib
     RUNTIME DESTINATION bin
@@ -313,6 +349,9 @@ add_test(NAME batch_reader_demo_test COMMAND batch_reader_demo)
 add_test(NAME numeric_index_demo_test COMMAND numeric_index_demo)
 add_test(NAME comparison_consistency_test COMMAND comparison_consistency_test)
 add_test(NAME stock_comparator_demo_test COMMAND stock_comparator_demo)
+add_test(NAME field_boundary_test COMMAND field_boundary_test)
+add_test(NAME detailed_diff_test COMMAND detailed_diff_test)
+add_test(NAME simple_test COMMAND simple_test)
 
 # 打印配置信息
 message(STATUS "Project: ${PROJECT_NAME}")
