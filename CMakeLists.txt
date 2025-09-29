@@ -134,6 +134,24 @@ target_compile_features(StockDataBatchReader PUBLIC cxx_std_11)
 # StockDataBatchReader库依赖StockDataContainer和LineReader库
 target_link_libraries(StockDataBatchReader StockDataContainer LineReader)
 
+# 创建StockDataComparator静态库
+add_library(StockDataComparator STATIC
+    src/StockDataComparator.cpp
+    include/StockDataComparator.h
+)
+
+# 设置StockDataComparator库的包含目录
+target_include_directories(StockDataComparator PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+    $<INSTALL_INTERFACE:include>
+)
+
+# 设置StockDataComparator库的C++标准
+target_compile_features(StockDataComparator PUBLIC cxx_std_11)
+
+# StockDataComparator库依赖StockDataContainer库
+target_link_libraries(StockDataComparator StockDataContainer)
+
 # 创建JsonParser示例可执行文件
 add_executable(json_example example/main.cpp)
 
@@ -194,6 +212,12 @@ add_executable(comparison_consistency_test example/comparison_consistency_test.c
 # 链接StockDataBatchReader库到比较一致性验证
 target_link_libraries(comparison_consistency_test StockDataBatchReader)
 
+# 创建股票数据比较器演示可执行文件
+add_executable(stock_comparator_demo example/stock_comparator_demo.cpp)
+
+# 链接StockDataComparator库到股票数据比较器演示
+target_link_libraries(stock_comparator_demo StockDataComparator)
+
 # 为不同构建类型设置编译选项
 target_compile_options(json_example PRIVATE
     $<$<CONFIG:Debug>:-g -O0>
@@ -245,6 +269,11 @@ target_compile_options(comparison_consistency_test PRIVATE
     $<$<CONFIG:Release>:-O3 -DNDEBUG>
 )
 
+target_compile_options(stock_comparator_demo PRIVATE
+    $<$<CONFIG:Debug>:-g -O0>
+    $<$<CONFIG:Release>:-O3 -DNDEBUG>
+)
+
 # 如果是Debug模式，添加调试信息
 if(CMAKE_BUILD_TYPE STREQUAL "Debug")
     target_compile_definitions(json_example PRIVATE DEBUG)
@@ -257,10 +286,11 @@ if(CMAKE_BUILD_TYPE STREQUAL "Debug")
     target_compile_definitions(batch_reader_demo PRIVATE DEBUG)
     target_compile_definitions(numeric_index_demo PRIVATE DEBUG)
     target_compile_definitions(comparison_consistency_test PRIVATE DEBUG)
+    target_compile_definitions(stock_comparator_demo PRIVATE DEBUG)
 endif()
 
 # 安装规则（可选）
-install(TARGETS JsonParser LineReader MarketData GenericJsonContainer StockDataContainer StockDataBatchReader json_example line_reader_demo market_demo generic_demo line_json_demo ignore_fields_demo stock_data_demo batch_reader_demo numeric_index_demo comparison_consistency_test
+install(TARGETS JsonParser LineReader MarketData GenericJsonContainer StockDataContainer StockDataBatchReader StockDataComparator json_example line_reader_demo market_demo generic_demo line_json_demo ignore_fields_demo stock_data_demo batch_reader_demo numeric_index_demo comparison_consistency_test stock_comparator_demo
     ARCHIVE DESTINATION lib
     LIBRARY DESTINATION lib
     RUNTIME DESTINATION bin
@@ -282,6 +312,7 @@ add_test(NAME stock_data_demo_test COMMAND stock_data_demo)
 add_test(NAME batch_reader_demo_test COMMAND batch_reader_demo)
 add_test(NAME numeric_index_demo_test COMMAND numeric_index_demo)
 add_test(NAME comparison_consistency_test COMMAND comparison_consistency_test)
+add_test(NAME stock_comparator_demo_test COMMAND stock_comparator_demo)
 
 # 打印配置信息
 message(STATUS "Project: ${PROJECT_NAME}")
