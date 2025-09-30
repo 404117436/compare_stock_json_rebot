@@ -1,9 +1,10 @@
 #include "StockDataBatchReader.h"
 #include <iostream>
+#include <algorithm>
 
 // 构造函数
-StockDataBatchReader::StockDataBatchReader(const std::string& filePath, const std::string& indexKey, size_t maxMemorySize, int64_t indexDecimal)
-    : filePath_(filePath), maxMemorySize_(maxMemorySize), index_decimal_(indexDecimal), indexKey_(indexKey), hasPendingData_(false) {
+StockDataBatchReader::StockDataBatchReader(const std::string& filePath, const std::string& indexKey, size_t maxMemorySize, int64_t indexDecimal, const std::vector<std::string>& ignoreFields)
+    : filePath_(filePath), maxMemorySize_(maxMemorySize), index_decimal_(indexDecimal), indexKey_(indexKey), ignore_fields_(ignoreFields), hasPendingData_(false) {
 
     try {
         lineReader_ = std::unique_ptr<LineReader>(new LineReader(filePath_));
@@ -82,7 +83,15 @@ bool StockDataBatchReader::readSingleRecord(StockDataContainer& container) {
         container = StockDataContainer("BatchData", indexKey_);
 
         // 解析JSON
-        if (container.parseFromJsonString(jsonLine)) {
+        bool parseSuccess = false;
+        if (ignore_fields_.empty()) {
+            parseSuccess = container.parseFromJsonString(jsonLine);
+        } else {
+            std::string ignoreFieldsStr = joinIgnoreFields();
+            parseSuccess = container.parseFromJsonString(jsonLine, ignoreFieldsStr);
+        }
+
+        if (parseSuccess) {
             return true;
         } else {
             // 解析失败，尝试下一行
@@ -249,5 +258,43 @@ int64_t StockDataBatchReader::convertIndexToComparableValue(const std::string& i
     } catch (const std::exception& e) {
         std::cerr << "警告：转换索引值时发生未知错误: " << e.what() << "，使用默认值0" << std::endl;
         return 0;
+    }
+}
+
+// 将忽略字段转换为逗号分隔字符串
+std::string StockDataBatchReader::joinIgnoreFields() const {
+    if (ignore_fields_.empty()) {
+        return "";
+    }
+
+    std::string result;
+    for (size_t i = 0; i < ignore_fields_.size(); ++i) {
+        if (i > 0) {
+            result += ",";
+        }
+        result += ignore_fields_[i];
+    }
+    return result;
+}
+
+// 字段过滤控制方法
+void StockDataBatchReader::setIgnoreFields(const std::vector<std::string>& fields) {
+    ignore_fields_ = fields;
+}
+
+void StockDataBatchReader::addIgnoreField(const std::string& field) {
+    // 检查字段是否已存在，避免重复添加
+    for (const auto& existingField : ignore_fields_) {
+        if (existingField == field) {
+            return; // 字段已存在，不重复添加
+        }
+    }
+    ignore_fields_.push_back(field);
+}
+
+void StockDataBatchReader::removeIgnoreField(const std::string& field) {
+    auto it = std::find(ignore_fields_.begin(), ignore_fields_.end(), field);
+    if (it != ignore_fields_.end()) {
+        ignore_fields_.erase(it);
     }
 }
