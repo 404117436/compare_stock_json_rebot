@@ -6,6 +6,11 @@
 #include <exception>
 #include <map>
 #include <algorithm>
+#include <ctime>
+#include <sstream>
+#include <cstring>
+#include <sys/stat.h>
+#include <sys/types.h>
 #include "StockDataComparator.h"
 #include "StockDataBatchReader.h"
 
@@ -195,8 +200,204 @@ void printComparisonSummary(const ComparisonResult& result) {
     }
 }
 
+// 从 recordKey 提取 code（前6位字符）
+std::string extractCodeFromRecordKey(const std::string& recordKey) {
+    if (recordKey.length() >= 6) {
+        return recordKey.substr(0, 6);
+    }
+    return recordKey;  // 如果长度不足6位，返回原字符串
+}
+
+// 验证文件是否存在且可读
+bool validateFile(const std::string& filePath) {
+    std::ifstream file(filePath);
+    if (!file.good()) {
+        std::cerr << "❌ 文件不存在或无法读取: " << filePath << std::endl;
+        return false;
+    }
+    file.close();
+    return true;
+}
+
+// 创建输出目录
+bool createOutputDirectory(const std::string& dirPath) {
+    // 检查目录是否已存在
+    struct stat st;
+    if (stat(dirPath.c_str(), &st) == 0) {
+        if (S_ISDIR(st.st_mode)) {
+            return true;  // 目录已存在
+        } else {
+            std::cerr << "❌ 路径已存在但不是目录: " << dirPath << std::endl;
+            return false;
+        }
+    }
+
+    // 尝试创建目录
+    if (mkdir(dirPath.c_str(), 0755) == 0) {
+        std::cout << "✓ 创建输出目录: " << dirPath << std::endl;
+        return true;
+    } else {
+        std::cerr << "❌ 创建目录失败: " << dirPath << std::endl;
+        return false;
+    }
+}
+
+// 为特定 code 生成差异报告
+std::string generateCodeDifferenceReport(const std::string& code,
+                                       const std::vector<RecordComparisonDetail>& codeRecords) {
+    std::ostringstream report;
+
+    // 获取当前时间
+    time_t now = time(0);
+    char* timeStr = ctime(&now);
+    if (timeStr[strlen(timeStr)-1] == '\n') {
+        timeStr[strlen(timeStr)-1] = '\0';  // 移除换行符
+    }
+
+    // 报告头部
+    report << "股票代码: " << code << std::endl;
+    report << "差异记录总数: " << codeRecords.size() << std::endl;
+    report << "生成时间: " << timeStr << std::endl;
+    report << std::endl;
+
+    // 遍历该 code 的所有记录
+    int recordIndex = 1;
+    for (const auto& record : codeRecords) {
+        report << "========================" << std::endl;
+        report << std::endl;
+
+        report << "记录 " << recordIndex << " [" << record.recordKey << "]" << std::endl;
+
+        // 从 recordKey 提取时间部分（后6位）
+        std::string timeValue = "未知";
+        if (record.recordKey.length() >= 12) {
+            timeValue = record.recordKey.substr(6);
+        }
+        report << "时间: " << timeValue << std::endl;
+        report << "状态: " << (record.identical ? "相同" : "有差异") << std::endl;
+        report << std::endl;
+
+        if (!record.identical && !record.differences.empty()) {
+            report << "字段差异详情:" << std::endl;
+
+            for (const auto& diff : record.differences) {
+                report << "  字段名: " << diff.fieldName << std::endl;
+                report << "  差异类型: " << diff.differenceType << std::endl;
+
+                if (diff.existsInA) {
+                    report << "  A中的值: ";
+                    if (diff.valueA.isString()) {
+                        report << "\"" << diff.valueA.asString() << "\"";
+                    } else if (diff.valueA.isDouble()) {
+                        report << diff.valueA.asDouble();
+                    } else if (diff.valueA.isInt()) {
+                        report << diff.valueA.asInt();
+                    } else if (diff.valueA.isBool()) {
+                        report << (diff.valueA.asBool() ? "true" : "false");
+                    } else if (diff.valueA.isNull()) {
+                        report << "null";
+                    } else {
+                        report << "[复杂类型]";
+                    }
+                    report << std::endl;
+                } else {
+                    report << "  A中的值: [不存在]" << std::endl;
+                }
+
+                if (diff.existsInB) {
+                    report << "  B中的值: ";
+                    if (diff.valueB.isString()) {
+                        report << "\"" << diff.valueB.asString() << "\"";
+                    } else if (diff.valueB.isDouble()) {
+                        report << diff.valueB.asDouble();
+                    } else if (diff.valueB.isInt()) {
+                        report << diff.valueB.asInt();
+                    } else if (diff.valueB.isBool()) {
+                        report << (diff.valueB.asBool() ? "true" : "false");
+                    } else if (diff.valueB.isNull()) {
+                        report << "null";
+                    } else {
+                        report << "[复杂类型]";
+                    }
+                    report << std::endl;
+                } else {
+                    report << "  B中的值: [不存在]" << std::endl;
+                }
+
+                if (!diff.description.empty()) {
+                    report << "  描述: " << diff.description << std::endl;
+                }
+                report << std::endl;
+            }
+        }
+
+        recordIndex++;
+    }
+
+    report << "========================" << std::endl;
+
+    return report.str();
+}
+
+// 按 code 分组差异并写入文件
+void writeDifferencesToFiles(const ComparisonResult& result, const std::string& outputDir) {
+    std::cout << "\n=== 写入差异文件 ===" << std::endl;
+
+    // 创建输出目录
+    if (!createOutputDirectory(outputDir)) {
+        std::cerr << "❌ 无法创建输出目录，跳过文件写入" << std::endl;
+        return;
+    }
+
+    // 按 code 分组差异记录
+    std::map<std::string, std::vector<RecordComparisonDetail>> codeGroups;
+
+    for (const auto& detail : result.detailedDifferences) {
+        std::string code = extractCodeFromRecordKey(detail.recordKey);
+        codeGroups[code].push_back(detail);
+    }
+
+    if (codeGroups.empty()) {
+        std::cout << "✓ 没有差异记录需要写入文件" << std::endl;
+        return;
+    }
+
+    // 为每个 code 写入文件
+    int filesWritten = 0;
+    int totalRecords = 0;
+
+    for (const auto& pair : codeGroups) {
+        const std::string& code = pair.first;
+        const std::vector<RecordComparisonDetail>& records = pair.second;
+
+        // 生成文件名
+        std::string filename = outputDir + "/" + code + ".txt";
+
+        // 生成报告内容
+        std::string reportContent = generateCodeDifferenceReport(code, records);
+
+        // 写入文件
+        std::ofstream outFile(filename);
+        if (outFile.is_open()) {
+            outFile << reportContent;
+            outFile.close();
+
+            std::cout << "✓ 写入差异文件: " << filename
+                      << " (" << records.size() << " 条记录)" << std::endl;
+
+            filesWritten++;
+            totalRecords += records.size();
+        } else {
+            std::cerr << "❌ 无法创建文件: " << filename << std::endl;
+        }
+    }
+
+    std::cout << "✓ 差异文件写入完成: " << filesWritten << " 个文件，总计 "
+              << totalRecords << " 条差异记录" << std::endl;
+}
+
 // 演示JSON文件对比功能
-void demonstrateJsonFileComparison(const std::string& fileA, const std::string& fileB) {
+void demonstrateJsonFileComparison(const std::string& fileA, const std::string& fileB, const std::string& outputDir) {
     std::cout << "\n" << std::string(60, '=') << std::endl;
     std::cout << "JSON文件差异对比Demo" << std::endl;
     std::cout << std::string(60, '=') << std::endl;
@@ -234,6 +435,9 @@ void demonstrateJsonFileComparison(const std::string& fileA, const std::string& 
         std::cout << std::string(60, '-') << std::endl;
         result.printDetailedDifferences();
 
+        // 写入差异文件
+        writeDifferencesToFiles(result, outputDir);
+
         std::cout << "\n✅ JSON文件对比完成!" << std::endl;
 
     } catch (const std::exception& e) {
@@ -241,30 +445,104 @@ void demonstrateJsonFileComparison(const std::string& fileA, const std::string& 
     }
 }
 
+// 显示帮助信息
+void printUsage(const char* programName) {
+    std::cout << "用法: " << programName << " -a <文件A路径> -b <文件B路径> [-o <输出目录>]" << std::endl;
+    std::cout << std::endl;
+    std::cout << "必需参数:" << std::endl;
+    std::cout << "  -a <文件路径>  指定第一个JSON文件的绝对路径" << std::endl;
+    std::cout << "  -b <文件路径>  指定第二个JSON文件的绝对路径" << std::endl;
+    std::cout << std::endl;
+    std::cout << "可选参数:" << std::endl;
+    std::cout << "  -o <目录路径>  指定差异文件的输出目录，默认: ./diff_output/" << std::endl;
+    std::cout << "  -h, --help     显示此帮助信息" << std::endl;
+    std::cout << std::endl;
+    std::cout << "示例:" << std::endl;
+    std::cout << "  " << programName << " -a /path/to/fileA.json -b /path/to/fileB.json" << std::endl;
+    std::cout << "  " << programName << " -a data1.json -b data2.json -o /tmp/diff_result" << std::endl;
+    std::cout << "  " << programName << " --help" << std::endl;
+    std::cout << std::endl;
+    std::cout << "功能: JSON文件批量读取 + 详细差异对比 + 按股票代码分组输出" << std::endl;
+}
+
 // 主函数 - 演示不同的测试场景
-int main() {
+int main(int argc, char* argv[]) {
+    // 参数解析
+    std::string fileA;
+    std::string fileB;
+    std::string outputDir = "./diff_output";  // 默认输出目录
+
+    // 解析命令行参数
+    for (int i = 1; i < argc; i++) {
+        std::string arg = argv[i];
+
+        if (arg == "-h" || arg == "--help" || arg == "-help") {
+            printUsage(argv[0]);
+            return 0;
+        }
+        else if (arg == "-a") {
+            if (i + 1 >= argc) {
+                std::cerr << "❌ 参数 -a 需要指定文件路径!" << std::endl;
+                printUsage(argv[0]);
+                return 1;
+            }
+            fileA = argv[++i];
+        }
+        else if (arg == "-b") {
+            if (i + 1 >= argc) {
+                std::cerr << "❌ 参数 -b 需要指定文件路径!" << std::endl;
+                printUsage(argv[0]);
+                return 1;
+            }
+            fileB = argv[++i];
+        }
+        else if (arg == "-o") {
+            if (i + 1 >= argc) {
+                std::cerr << "❌ 参数 -o 需要指定输出目录!" << std::endl;
+                printUsage(argv[0]);
+                return 1;
+            }
+            outputDir = argv[++i];
+        }
+        else {
+            std::cerr << "❌ 未知参数: " << arg << std::endl;
+            printUsage(argv[0]);
+            return 1;
+        }
+    }
+
+    // 验证必需参数
+    if (fileA.empty() || fileB.empty()) {
+        std::cerr << "❌ 必须指定两个输入文件!" << std::endl;
+        std::cerr << "   使用 -a 指定文件A，使用 -b 指定文件B" << std::endl;
+        printUsage(argv[0]);
+        return 1;
+    }
+
+    // 验证文件是否存在
+    if (!validateFile(fileA)) {
+        return 1;
+    }
+    if (!validateFile(fileB)) {
+        return 1;
+    }
+
     std::cout << "StockDataComparator & StockDataBatchReader 集成演示" << std::endl;
-    std::cout << "功能：JSON文件批量读取 + 详细差异对比" << std::endl;
+    std::cout << "功能：JSON文件批量读取 + 详细差异对比 + 按Code分组输出" << std::endl;
+    std::cout << "文件A: " << fileA << std::endl;
+    std::cout << "文件B: " << fileB << std::endl;
+    std::cout << "输出目录: " << outputDir << std::endl;
     std::cout << std::string(60, '=') << std::endl;
 
-    const std::string testFileA = "comparison_test_fileA.json";
-    const std::string testFileB = "comparison_test_fileB.json";
-
     try {
-        // 1. 创建测试文件
-        std::cout << "\n=== 步骤1: 创建测试数据 ===" << std::endl;
-        createTestFileA(testFileA);
-        createTestFileB(testFileB);
+        // 1. 验证文件信息
+        std::cout << "\n=== 步骤1: 验证输入文件 ===" << std::endl;
+        std::cout << "✓ 文件A: " << fileA << std::endl;
+        std::cout << "✓ 文件B: " << fileB << std::endl;
 
-        // 2. 演示JSON文件对比
+        // 2. 执行JSON文件对比
         std::cout << "\n=== 步骤2: 执行文件对比 ===" << std::endl;
-        demonstrateJsonFileComparison(testFileA, testFileB);
-
-        // 3. 清理测试文件
-        std::cout << "\n=== 步骤3: 清理测试文件 ===" << std::endl;
-        std::remove(testFileA.c_str());
-        std::remove(testFileB.c_str());
-        std::cout << "✓ 测试文件已清理" << std::endl;
+        demonstrateJsonFileComparison(fileA, fileB, outputDir);
 
     } catch (const std::exception& e) {
         std::cerr << "❌ Demo执行失败: " << e.what() << std::endl;
@@ -277,6 +555,8 @@ int main() {
     std::cout << "  • StockDataComparator: 详细字段级差异分析" << std::endl;
     std::cout << "  • 自动数据补充: popBatch()的智能数据管理" << std::endl;
     std::cout << "  • 完整差异报告: 字段存在性、类型、值的全面对比" << std::endl;
+    std::cout << "  • 按Code分组输出: 自动按股票代码生成独立差异文件" << std::endl;
+    std::cout << "  • 灵活文件输出: 支持自定义输出目录路径" << std::endl;
 
     return 0;
 }
