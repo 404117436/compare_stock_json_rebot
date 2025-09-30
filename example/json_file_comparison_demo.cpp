@@ -19,6 +19,27 @@
  * 功能：使用StockDataBatchReader读取两个JSON文件，使用StockDataComparator进行详细对比
  */
 
+// 解析逗号分隔的字段列表
+std::vector<std::string> parseIgnoreFields(const std::string& fieldsStr) {
+    std::vector<std::string> fields;
+    if (fieldsStr.empty()) {
+        return fields;  // 空字符串返回空列表
+    }
+
+    std::stringstream ss(fieldsStr);
+    std::string field;
+
+    while (std::getline(ss, field, ',')) {
+        // 去除前后空格
+        field.erase(0, field.find_first_not_of(" \t"));
+        field.erase(field.find_last_not_of(" \t") + 1);
+        if (!field.empty()) {
+            fields.push_back(field);
+        }
+    }
+    return fields;
+}
+
 // 创建测试文件A - 完整的股票数据
 void createTestFileA(const std::string& filename) {
     std::ofstream file(filename);
@@ -76,12 +97,12 @@ void createTestFileB(const std::string& filename) {
 }
 
 // 使用StockDataBatchReader读取JSON文件数据
-std::vector<StockDataContainer> loadDataFromFile(const std::string& filename, const std::string& indexKey = "time") {
+std::vector<StockDataContainer> loadDataFromFile(const std::string& filename, const std::string& indexKey = "time", const std::vector<std::string>& ignoreFields = {}) {
     std::cout << "\n--- 读取文件: " << filename << " ---" << std::endl;
 
     try {
         // 创建批量读取器，使用较大的内存限制确保能处理所有数据
-        StockDataBatchReader reader(filename, indexKey, 4096);
+        StockDataBatchReader reader(filename, indexKey, 4096, 1, ignoreFields);
         std::vector<StockDataContainer> allData;
 
         size_t totalRecords = 0;
@@ -399,15 +420,15 @@ void writeDifferencesToFiles(const ComparisonResult& result, const std::string& 
 }
 
 // 演示JSON文件对比功能
-void demonstrateJsonFileComparison(const std::string& fileA, const std::string& fileB, const std::string& outputDir) {
+void demonstrateJsonFileComparison(const std::string& fileA, const std::string& fileB, const std::string& outputDir, const std::vector<std::string>& ignoreFields = {}) {
     std::cout << "\n" << std::string(60, '=') << std::endl;
     std::cout << "JSON文件差异对比Demo" << std::endl;
     std::cout << std::string(60, '=') << std::endl;
 
     try {
         // 读取两个文件
-        auto dataA = loadDataFromFile(fileA);
-        auto dataB = loadDataFromFile(fileB);
+        auto dataA = loadDataFromFile(fileA, "time", ignoreFields);
+        auto dataB = loadDataFromFile(fileB, "time", ignoreFields);
 
         // 显示文件信息
         printFileInfo(dataA, fileA);
@@ -449,7 +470,7 @@ void demonstrateJsonFileComparison(const std::string& fileA, const std::string& 
 
 // 显示帮助信息
 void printUsage(const char* programName) {
-    std::cout << "用法: " << programName << " -a <文件A路径> -b <文件B路径> [-o <输出目录>]" << std::endl;
+    std::cout << "用法: " << programName << " -a <文件A路径> -b <文件B路径> [-o <输出目录>] [-f <过滤字段>]" << std::endl;
     std::cout << std::endl;
     std::cout << "必需参数:" << std::endl;
     std::cout << "  -a <文件路径>  指定第一个JSON文件的绝对路径" << std::endl;
@@ -457,11 +478,14 @@ void printUsage(const char* programName) {
     std::cout << std::endl;
     std::cout << "可选参数:" << std::endl;
     std::cout << "  -o <目录路径>  指定差异文件的输出目录，默认: ./diff_output/" << std::endl;
+    std::cout << "  -f <字段列表>  指定需要忽略的字段，用逗号分隔（可选）" << std::endl;
     std::cout << "  -h, --help     显示此帮助信息" << std::endl;
     std::cout << std::endl;
     std::cout << "示例:" << std::endl;
     std::cout << "  " << programName << " -a /path/to/fileA.json -b /path/to/fileB.json" << std::endl;
     std::cout << "  " << programName << " -a data1.json -b data2.json -o /tmp/diff_result" << std::endl;
+    std::cout << "  " << programName << " -a data1.json -b data2.json -f timestamp,debug_info" << std::endl;
+    std::cout << "  " << programName << " -a data1.json -b data2.json  # 不过滤任何字段" << std::endl;
     std::cout << "  " << programName << " --help" << std::endl;
     std::cout << std::endl;
     std::cout << "功能: JSON文件批量读取 + 详细差异对比 + 按股票代码分组输出" << std::endl;
@@ -473,6 +497,7 @@ int main(int argc, char* argv[]) {
     std::string fileA;
     std::string fileB;
     std::string outputDir = "./diff_output";  // 默认输出目录
+    std::vector<std::string> ignoreFields;    // 默认为空，表示不过滤
 
     // 解析命令行参数
     for (int i = 1; i < argc; i++) {
@@ -506,6 +531,25 @@ int main(int argc, char* argv[]) {
             }
             outputDir = argv[++i];
         }
+        else if (arg == "-f") {
+            if (i + 1 >= argc) {
+                std::cerr << "❌ 参数 -f 需要指定过滤字段列表!" << std::endl;
+                printUsage(argv[0]);
+                return 1;
+            }
+            std::string fieldsStr = argv[++i];
+            ignoreFields = parseIgnoreFields(fieldsStr);
+
+            // 显示解析到的字段
+            if (!ignoreFields.empty()) {
+                std::cout << "✓ 将过滤字段: ";
+                for (size_t j = 0; j < ignoreFields.size(); ++j) {
+                    if (j > 0) std::cout << ", ";
+                    std::cout << ignoreFields[j];
+                }
+                std::cout << std::endl;
+            }
+        }
         else {
             std::cerr << "❌ 未知参数: " << arg << std::endl;
             printUsage(argv[0]);
@@ -534,6 +578,16 @@ int main(int argc, char* argv[]) {
     std::cout << "文件A: " << fileA << std::endl;
     std::cout << "文件B: " << fileB << std::endl;
     std::cout << "输出目录: " << outputDir << std::endl;
+    if (!ignoreFields.empty()) {
+        std::cout << "忽略字段: ";
+        for (size_t i = 0; i < ignoreFields.size(); ++i) {
+            if (i > 0) std::cout << ", ";
+            std::cout << ignoreFields[i];
+        }
+        std::cout << std::endl;
+    } else {
+        std::cout << "字段过滤: 未启用（读取所有字段）" << std::endl;
+    }
     std::cout << std::string(60, '=') << std::endl;
 
     try {
@@ -544,7 +598,7 @@ int main(int argc, char* argv[]) {
 
         // 2. 执行JSON文件对比
         std::cout << "\n=== 步骤2: 执行文件对比 ===" << std::endl;
-        demonstrateJsonFileComparison(fileA, fileB, outputDir);
+        demonstrateJsonFileComparison(fileA, fileB, outputDir, ignoreFields);
 
     } catch (const std::exception& e) {
         std::cerr << "❌ Demo执行失败: " << e.what() << std::endl;
