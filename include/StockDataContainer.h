@@ -17,7 +17,8 @@ class StockDataContainer : public GenericJsonContainer {
 private:
     std::string code_;         // 股票代码（固定提取"code"字段）
     std::string index_key_;    // 用户指定的索引字段名
-    std::string index_value_;  // 索引字段对应的值
+    int64_t index_value_;      // 索引字段对应的值（数值类型）
+    int64_t index_decimal_;    // 索引精度控制，默认值为1
     std::string raw_json_;     // 原始JSON字符串
 
     // 从解析后的数据中自动提取关键字段
@@ -28,6 +29,7 @@ public:
     StockDataContainer();                                                    // 默认索引字段为"time"
     explicit StockDataContainer(const std::string& source);                 // 默认索引字段为"time"
     StockDataContainer(const std::string& source, const std::string& index_key); // 指定索引字段
+    StockDataContainer(const std::string& source, const std::string& index_key, int64_t index_decimal); // 指定索引字段和精度
 
     // 重写JSON解析方法，自动提取关键字段
     bool parseFromJsonString(const std::string& jsonStr) override;
@@ -37,13 +39,18 @@ public:
     void setIndexKey(const std::string& key);                              // 设置索引字段名
     const std::string& getIndexKey() const { return index_key_; }          // 获取当前索引字段名
 
+    // 精度控制
+    int64_t getIndexDecimal() const { return index_decimal_; }            // 获取索引精度
+    void setIndexDecimal(int64_t decimal);                                // 设置索引精度
+    int64_t convertIndexToComparableValue(const std::string& indexValue) const;   // 索引值转换方法
+
     // 核心访问接口
     const std::string& getCode() const { return code_; }                   // 获取股票代码
-    const std::string& getIndexValue() const { return index_value_; }      // 获取索引字段值
+    int64_t getIndexValue() const { return index_value_; }                 // 获取索引字段值
     const std::string& getRawJson() const { return raw_json_; }            // 获取原始JSON
 
-    // 向后兼容接口（当索引字段为数字类型时）
-    int64_t getIndexAsInt() const;                                         // 将索引值转为整数
+    // 向后兼容接口
+    int64_t getIndexAsInt() const { return index_value_; }                 // 获取索引值（直接返回）
     double getIndexAsDouble() const;                                       // 将索引值转为浮点数
 
     // 基本信息输出

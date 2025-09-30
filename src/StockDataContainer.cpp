@@ -4,15 +4,19 @@
 
 // 构造函数
 StockDataContainer::StockDataContainer()
-    : GenericJsonContainer("StockData"), code_(""), index_key_("time"), index_value_("") {
+    : GenericJsonContainer("StockData"), code_(""), index_key_("time"), index_value_(0), index_decimal_(1) {
 }
 
 StockDataContainer::StockDataContainer(const std::string& source)
-    : GenericJsonContainer(source), code_(""), index_key_("time"), index_value_("") {
+    : GenericJsonContainer(source), code_(""), index_key_("time"), index_value_(0), index_decimal_(1) {
 }
 
 StockDataContainer::StockDataContainer(const std::string& source, const std::string& index_key)
-    : GenericJsonContainer(source), code_(""), index_key_(index_key), index_value_("") {
+    : GenericJsonContainer(source), code_(""), index_key_(index_key), index_value_(0), index_decimal_(1) {
+}
+
+StockDataContainer::StockDataContainer(const std::string& source, const std::string& index_key, int64_t index_decimal)
+    : GenericJsonContainer(source), code_(""), index_key_(index_key), index_value_(0), index_decimal_(index_decimal) {
 }
 
 // 重写JSON解析方法，自动提取关键字段
@@ -62,18 +66,21 @@ void StockDataContainer::extractKeyFields() {
     try {
         if (!index_key_.empty() && hasKey(index_key_)) {
             const auto& indexValue = getValue(index_key_);
+            std::string rawIndexValue;
             if (indexValue.isString()) {
-                index_value_ = indexValue.asString();
+                rawIndexValue = indexValue.asString();
             } else if (indexValue.isInt()) {
-                index_value_ = std::to_string(indexValue.asInt());
+                rawIndexValue = std::to_string(indexValue.asInt());
             } else if (indexValue.isDouble()) {
-                index_value_ = std::to_string(indexValue.asDouble());
+                rawIndexValue = std::to_string(indexValue.asDouble());
             } else if (indexValue.isBool()) {
-                index_value_ = indexValue.asBool() ? "true" : "false";
+                rawIndexValue = indexValue.asBool() ? "true" : "false";
             }
+            // 使用新的转换方法
+            index_value_ = convertIndexToComparableValue(rawIndexValue);
         }
     } catch (...) {
-        index_value_ = "";  // 提取失败则置空
+        index_value_ = 0;  // 提取失败则置为0
     }
 }
 
@@ -86,27 +93,47 @@ void StockDataContainer::setIndexKey(const std::string& key) {
     }
 }
 
-// 向后兼容接口（当索引字段为数字类型时）
-int64_t StockDataContainer::getIndexAsInt() const {
-    try {
-        if (!index_value_.empty()) {
-            return std::stoll(index_value_);
+// 精度控制
+void StockDataContainer::setIndexDecimal(int64_t decimal) {
+    if (decimal > 0) {
+        index_decimal_ = decimal;
+        // 如果已经有数据，重新提取索引字段
+        if (!empty()) {
+            extractKeyFields();
         }
-    } catch (...) {
-        // 转换失败
     }
-    return 0;
 }
 
-double StockDataContainer::getIndexAsDouble() const {
+// 将索引值转换为可比较的数值
+int64_t StockDataContainer::convertIndexToComparableValue(const std::string& indexValue) const {
     try {
-        if (!index_value_.empty()) {
-            return std::stod(index_value_);
+        if (indexValue.empty()) {
+            return 0;
         }
-    } catch (...) {
-        // 转换失败
+        // 移除前导空格
+        std::string trimmedValue = indexValue;
+        size_t start = trimmedValue.find_first_not_of(" \t");
+        if (start != std::string::npos) {
+            trimmedValue = trimmedValue.substr(start);
+        } else {
+            return 0; // 全是空格
+        }
+        // 转换为int64_t
+        int64_t value = std::stoll(trimmedValue);
+        // 应用精度除法
+        return value / index_decimal_;
+    } catch (const std::invalid_argument& e) {
+        std::cerr << "警告：无法将索引值 '" << indexValue << "' 转换为数字，使用默认值0" << std::endl;
+        return 0;
+    } catch (const std::out_of_range& e) {
+        std::cerr << "警告：索引值 '" << indexValue << "' 超出int64范围，使用默认值0" << std::endl;
+        return 0;
     }
-    return 0.0;
+}
+
+// 向后兼容接口
+double StockDataContainer::getIndexAsDouble() const {
+    return static_cast<double>(index_value_);
 }
 
 // 基本信息输出
@@ -115,7 +142,8 @@ void StockDataContainer::printStockInfo() const {
     std::cout << "数据源: " << getSource() << std::endl;
     std::cout << "股票代码: " << (code_.empty() ? "未提取" : code_) << std::endl;
     std::cout << "索引字段: " << index_key_ << std::endl;
-    std::cout << "索引值: " << (index_value_.empty() ? "未提取" : index_value_) << std::endl;
+    std::cout << "索引值: " << index_value_ << std::endl;
+    std::cout << "索引精度: " << index_decimal_ << std::endl;
     std::cout << "原始JSON长度: " << raw_json_.length() << " 字符" << std::endl;
     std::cout << "解析字段数: " << size() << std::endl;
 
