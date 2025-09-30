@@ -62,23 +62,7 @@ target_include_directories(LineReader PUBLIC
 # 设置LineReader库的C++标准
 target_compile_features(LineReader PUBLIC cxx_std_11)
 
-# 创建MarketData静态库
-add_library(MarketData STATIC
-    src/MarketData.cpp
-    include/MarketData.h
-)
-
-# 设置MarketData库的包含目录
-target_include_directories(MarketData PUBLIC
-    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
-    $<INSTALL_INTERFACE:include>
-)
-
-# 设置MarketData库的C++标准
-target_compile_features(MarketData PUBLIC cxx_std_11)
-
-# MarketData库依赖JsonParser库
-target_link_libraries(MarketData JsonParser)
+# MarketData library removed - not needed for current demos
 
 # 创建GenericJsonContainer静态库
 add_library(GenericJsonContainer STATIC
@@ -164,11 +148,7 @@ add_executable(line_reader_demo example/demo.cpp)
 # 链接LineReader库到示例
 target_link_libraries(line_reader_demo LineReader)
 
-# 创建MarketData示例可执行文件
-add_executable(market_demo example/market_demo.cpp)
-
-# 链接MarketData库到示例
-target_link_libraries(market_demo MarketData)
+# MarketData demo removed - MarketData library not available
 
 # 创建GenericJsonContainer示例可执行文件
 add_executable(generic_demo example/generic_demo.cpp)
@@ -253,10 +233,7 @@ target_compile_options(line_reader_demo PRIVATE
     $<$<CONFIG:Release>:-O3 -DNDEBUG>
 )
 
-target_compile_options(market_demo PRIVATE
-    $<$<CONFIG:Debug>:-g -O0>
-    $<$<CONFIG:Release>:-O3 -DNDEBUG>
-)
+# market_demo compile options removed
 
 target_compile_options(generic_demo PRIVATE
     $<$<CONFIG:Debug>:-g -O0>
@@ -322,7 +299,7 @@ target_compile_options(json_file_comparison_demo PRIVATE
 if(CMAKE_BUILD_TYPE STREQUAL "Debug")
     target_compile_definitions(json_example PRIVATE DEBUG)
     target_compile_definitions(line_reader_demo PRIVATE DEBUG)
-    target_compile_definitions(market_demo PRIVATE DEBUG)
+    # market_demo debug definition removed
     target_compile_definitions(generic_demo PRIVATE DEBUG)
     target_compile_definitions(line_json_demo PRIVATE DEBUG)
     target_compile_definitions(ignore_fields_demo PRIVATE DEBUG)
@@ -338,7 +315,7 @@ if(CMAKE_BUILD_TYPE STREQUAL "Debug")
 endif()
 
 # 安装规则（可选）
-install(TARGETS JsonParser LineReader MarketData GenericJsonContainer StockDataContainer StockDataBatchReader StockDataComparator json_example line_reader_demo market_demo generic_demo line_json_demo ignore_fields_demo stock_data_demo batch_reader_demo numeric_index_demo comparison_consistency_test stock_comparator_demo field_boundary_test detailed_diff_test simple_test json_file_comparison_demo
+install(TARGETS JsonParser LineReader GenericJsonContainer StockDataContainer StockDataBatchReader StockDataComparator json_example line_reader_demo generic_demo line_json_demo ignore_fields_demo stock_data_demo batch_reader_demo numeric_index_demo comparison_consistency_test stock_comparator_demo field_boundary_test detailed_diff_test simple_test json_file_comparison_demo
     ARCHIVE DESTINATION lib
     LIBRARY DESTINATION lib
     RUNTIME DESTINATION bin
@@ -352,7 +329,7 @@ enable_testing()
 # 添加基本测试
 add_test(NAME json_parser_test COMMAND json_example)
 add_test(NAME line_reader_test COMMAND line_reader_demo)
-add_test(NAME market_data_test COMMAND market_demo)
+# market_data_test removed
 add_test(NAME generic_container_test COMMAND generic_demo)
 add_test(NAME line_json_demo_test COMMAND line_json_demo)
 add_test(NAME ignore_fields_demo_test COMMAND ignore_fields_demo)

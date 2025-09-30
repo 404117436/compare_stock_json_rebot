@@ -193,6 +193,23 @@ bool StockDataComparator::compareCustomValues(const CustomValue& a, const Custom
             return a.asBool() == b.asBool();
         case JsonValueType::Null:
             return true; // 两个null值相等
+        case JsonValueType::Array: {
+            const JsonArrayData& arrayA = a.asArray();
+            const JsonArrayData& arrayB = b.asArray();
+
+            // 首先比较数组长度
+            if (arrayA.size() != arrayB.size()) {
+                return false;
+            }
+
+            // 逐个比较数组元素
+            for (size_t i = 0; i < arrayA.size(); ++i) {
+                if (!compareCustomValues(arrayA[i], arrayB[i])) {
+                    return false;
+                }
+            }
+            return true;
+        }
         default:
             return false;
     }
