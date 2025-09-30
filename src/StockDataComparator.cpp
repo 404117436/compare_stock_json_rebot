@@ -334,9 +334,17 @@ RecordComparisonDetail StockDataComparator::compareRecordFieldsDetailed(const St
     // 合并所有字段名，去重
     std::unordered_set<std::string> allFieldNames;
     for (const auto& field : fieldsA) {
+        if (field == a.getIndexKey())
+        {
+            continue;
+        }
         allFieldNames.insert(field);
     }
     for (const auto& field : fieldsB) {
+        if (field == b.getIndexKey())
+        {
+            continue;
+        }
         allFieldNames.insert(field);
     }
 
