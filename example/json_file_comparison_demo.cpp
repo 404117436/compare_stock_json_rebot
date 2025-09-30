@@ -9,6 +9,7 @@
 #include <ctime>
 #include <sstream>
 #include <cstring>
+#include <cstdio>
 #include <sys/stat.h>
 #include <sys/types.h>
 #include "StockDataComparator.h"
@@ -283,12 +284,21 @@ std::string generateCodeDifferenceReport(const std::string& code,
     report << std::endl;
 
     // 遍历该 code 的所有记录
-    int recordIndex = 1;
+    int recordIndex = 0;
     for (const auto& record : codeRecords) {
         report << "========================" << std::endl;
         report << std::endl;
 
-        report << "记录 " << recordIndex << " [" << record.recordKey << "]" << std::endl;
+        // 显示原始JSON记录
+        report << "A侧原始记录 (行 " << recordIndex << "):" << std::endl;
+        report << "  " << record.raw_json_a << std::endl;
+
+        report << "B侧原始记录 (行 " << recordIndex << "):" << std::endl;
+        report << "  " << record.raw_json_b << std::endl;
+
+        report << std::endl;
+        report << "差异类型: " << (record.identical ? "IDENTICAL" : "DIFF") << std::endl;
+        report << std::endl;
 
         // 从 recordKey 提取时间部分（下划线分隔符之后的部分）
         std::string timeValue = "未知";
@@ -296,62 +306,101 @@ std::string generateCodeDifferenceReport(const std::string& code,
         if (underscorePos != std::string::npos && underscorePos + 1 < record.recordKey.length()) {
             timeValue = record.recordKey.substr(underscorePos + 1);
         }
-        report << "时间: " << timeValue << std::endl;
-        report << "状态: " << (record.identical ? "相同" : "有差异") << std::endl;
+        report << "记录标识: " << record.recordKey << std::endl;
+        report << "时间标识: " << timeValue << std::endl;
         report << std::endl;
 
         if (!record.identical && !record.differences.empty()) {
-            report << "字段差异详情:" << std::endl;
+            report << "字段差异详情 (" << record.differences.size() << " 个字段):" << std::endl;
+            report << "字段名            差异类型         A侧值                        B侧值" << std::endl;
+            report << "--------------------------------------------------------------------------------" << std::endl;
 
             for (const auto& diff : record.differences) {
-                report << "  字段名: " << diff.fieldName << std::endl;
-                report << "  差异类型: " << diff.differenceType << std::endl;
+                // 转换差异类型名称
+                std::string diffType;
+                if (diff.differenceType == "missing_in_A") {
+                    diffType = "MISSING_IN_A";
+                } else if (diff.differenceType == "missing_in_B") {
+                    diffType = "MISSING_IN_B";
+                } else if (diff.differenceType == "value_different") {
+                    diffType = "VALUE_DIFFERENT";
+                } else if (diff.differenceType == "type_mismatch") {
+                    diffType = "TYPE_MISMATCH";
+                } else {
+                    diffType = diff.differenceType;
+                }
 
+                // 格式化A侧值
+                std::string valueAStr = "null";
                 if (diff.existsInA) {
-                    report << "  A中的值: ";
-                    if (diff.valueA.isString()) {
-                        report << "\"" << diff.valueA.asString() << "\"";
-                    } else if (diff.valueA.isDouble()) {
-                        report << diff.valueA.asDouble();
-                    } else if (diff.valueA.isInt()) {
-                        report << diff.valueA.asInt();
-                    } else if (diff.valueA.isBool()) {
-                        report << (diff.valueA.asBool() ? "true" : "false");
-                    } else if (diff.valueA.isNull()) {
-                        report << "null";
-                    } else {
-                        report << "[复杂类型]";
+                    switch (diff.valueA.getType()) {
+                        case JsonValueType::String:
+                            valueAStr = "\"" + diff.valueA.asString() + "\"";
+                            break;
+                        case JsonValueType::Int:
+                            valueAStr = std::to_string(diff.valueA.asInt());
+                            break;
+                        case JsonValueType::Double:
+                            valueAStr = std::to_string(diff.valueA.asDouble());
+                            break;
+                        case JsonValueType::Bool:
+                            valueAStr = diff.valueA.asBool() ? "true" : "false";
+                            break;
+                        case JsonValueType::Null:
+                            valueAStr = "null";
+                            break;
+                        case JsonValueType::Array:
+                        case JsonValueType::Object:
+                            valueAStr = "[复杂类型]";
+                            break;
+                        default:
+                            valueAStr = "[未知类型]";
+                            break;
                     }
-                    report << std::endl;
-                } else {
-                    report << "  A中的值: [不存在]" << std::endl;
                 }
 
+                // 格式化B侧值
+                std::string valueBStr = "null";
                 if (diff.existsInB) {
-                    report << "  B中的值: ";
-                    if (diff.valueB.isString()) {
-                        report << "\"" << diff.valueB.asString() << "\"";
-                    } else if (diff.valueB.isDouble()) {
-                        report << diff.valueB.asDouble();
-                    } else if (diff.valueB.isInt()) {
-                        report << diff.valueB.asInt();
-                    } else if (diff.valueB.isBool()) {
-                        report << (diff.valueB.asBool() ? "true" : "false");
-                    } else if (diff.valueB.isNull()) {
-                        report << "null";
-                    } else {
-                        report << "[复杂类型]";
+                    switch (diff.valueB.getType()) {
+                        case JsonValueType::String:
+                            valueBStr = "\"" + diff.valueB.asString() + "\"";
+                            break;
+                        case JsonValueType::Int:
+                            valueBStr = std::to_string(diff.valueB.asInt());
+                            break;
+                        case JsonValueType::Double:
+                            valueBStr = std::to_string(diff.valueB.asDouble());
+                            break;
+                        case JsonValueType::Bool:
+                            valueBStr = diff.valueB.asBool() ? "true" : "false";
+                            break;
+                        case JsonValueType::Null:
+                            valueBStr = "null";
+                            break;
+                        case JsonValueType::Array:
+                        case JsonValueType::Object:
+                            valueBStr = "[复杂类型]";
+                            break;
+                        default:
+                            valueBStr = "[未知类型]";
+                            break;
                     }
-                    report << std::endl;
-                } else {
-                    report << "  B中的值: [不存在]" << std::endl;
                 }
 
-                if (!diff.description.empty()) {
-                    report << "  描述: " << diff.description << std::endl;
-                }
-                report << std::endl;
+                // 输出表格化的行（使用固定宽度格式化）
+                char buffer[512];
+                snprintf(buffer, sizeof(buffer), "%-16s%-16s%-28s%s",
+                         diff.fieldName.c_str(),
+                         diffType.c_str(),
+                         valueAStr.c_str(),
+                         valueBStr.c_str());
+                report << buffer << std::endl;
             }
+            report << std::endl;
+        } else if (record.identical) {
+            report << "记录完全相同，无字段差异。" << std::endl;
+            report << std::endl;
         }
 
         recordIndex++;

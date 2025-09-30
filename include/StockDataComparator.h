@@ -28,6 +28,8 @@ struct RecordComparisonDetail {
     bool identical;                             // 是否完全相同
     std::vector<FieldDifference> differences;   // 字段差异列表
     std::string recordKey;                      // 记录键(code_indexValue)
+    std::string raw_json_a;                     // 原始JSON数据A
+    std::string raw_json_b;                     // 原始JSON数据B
 
     RecordComparisonDetail() : identical(false) {}
 };

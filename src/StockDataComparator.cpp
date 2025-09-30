@@ -233,6 +233,8 @@ bool StockDataComparator::compareDoubleFields(double a, double b) const {
 RecordComparisonDetail StockDataComparator::compareRecordFieldsDetailed(const StockDataContainer& a, const StockDataContainer& b) const {
     RecordComparisonDetail detail;
     detail.recordKey = generateRecordKey(a);
+    detail.raw_json_a = a.getRawJson();
+    detail.raw_json_b = b.getRawJson();
 
     // 1. 基础字段比较
     if (a.getCode() != b.getCode() || a.getIndexKey() != b.getIndexKey() || a.getIndexValue() != b.getIndexValue()) {
@@ -486,66 +488,113 @@ void ComparisonResult::printDetailedDifferences() const {
         return;
     }
 
-    std::cout << "\n=== 详细差异报告 ===" << std::endl;
-    std::cout << "总比较记录数: " << totalComparedRecords << std::endl;
-    std::cout << "有差异的记录数: " << recordsWithDifferences << std::endl;
-    std::cout << "详细差异条目数: " << detailedDifferences.size() << std::endl;
-
     if (detailedDifferences.empty()) {
         std::cout << "没有发现字段级差异" << std::endl;
         return;
     }
 
+    // 聚合输出每条记录的比较结果
     for (size_t i = 0; i < detailedDifferences.size(); ++i) {
         const auto& detail = detailedDifferences[i];
-        std::cout << "\n--- 记录 " << (i+1) << " [" << detail.recordKey << "] ---" << std::endl;
-        std::cout << "相同: " << (detail.identical ? "是" : "否") << std::endl;
 
-        if (!detail.differences.empty()) {
-            std::cout << "字段差异详情:" << std::endl;
+        std::cout << "\nA侧原始记录 (行 " << i << "):" << std::endl;
+        std::cout << "  " << detail.raw_json_a << std::endl;
+
+        std::cout << "B侧原始记录 (行 " << i << "):" << std::endl;
+        std::cout << "  " << detail.raw_json_b << std::endl;
+
+        std::cout << std::endl;
+        std::cout << "差异类型: " << (detail.identical ? "IDENTICAL" : "DIFF") << std::endl;
+        std::cout << std::endl;
+
+        if (!detail.identical && !detail.differences.empty()) {
+            std::cout << "字段差异详情 (" << detail.differences.size() << " 个字段):" << std::endl;
+            std::cout << "字段名            差异类型         A侧值                        B侧值" << std::endl;
+            std::cout << "--------------------------------------------------------------------------------" << std::endl;
+
             for (const auto& diff : detail.differences) {
-                std::cout << "  " << diff.description << std::endl;
-
-                if (diff.existsInA && diff.existsInB) {
-                    std::cout << "    A: ";
-                    switch (diff.valueA.getType()) {
-                        case JsonValueType::String: std::cout << "\"" << diff.valueA.asString() << "\""; break;
-                        case JsonValueType::Int: std::cout << diff.valueA.asInt(); break;
-                        case JsonValueType::Double: std::cout << diff.valueA.asDouble(); break;
-                        case JsonValueType::Bool: std::cout << (diff.valueA.asBool() ? "true" : "false"); break;
-                        case JsonValueType::Null: std::cout << "null"; break;
-                    }
-                    std::cout << " | B: ";
-                    switch (diff.valueB.getType()) {
-                        case JsonValueType::String: std::cout << "\"" << diff.valueB.asString() << "\""; break;
-                        case JsonValueType::Int: std::cout << diff.valueB.asInt(); break;
-                        case JsonValueType::Double: std::cout << diff.valueB.asDouble(); break;
-                        case JsonValueType::Bool: std::cout << (diff.valueB.asBool() ? "true" : "false"); break;
-                        case JsonValueType::Null: std::cout << "null"; break;
-                    }
-                    std::cout << std::endl;
-                } else if (diff.existsInA) {
-                    std::cout << "    仅在A中: ";
-                    switch (diff.valueA.getType()) {
-                        case JsonValueType::String: std::cout << "\"" << diff.valueA.asString() << "\""; break;
-                        case JsonValueType::Int: std::cout << diff.valueA.asInt(); break;
-                        case JsonValueType::Double: std::cout << diff.valueA.asDouble(); break;
-                        case JsonValueType::Bool: std::cout << (diff.valueA.asBool() ? "true" : "false"); break;
-                        case JsonValueType::Null: std::cout << "null"; break;
-                    }
-                    std::cout << std::endl;
-                } else if (diff.existsInB) {
-                    std::cout << "    仅在B中: ";
-                    switch (diff.valueB.getType()) {
-                        case JsonValueType::String: std::cout << "\"" << diff.valueB.asString() << "\""; break;
-                        case JsonValueType::Int: std::cout << diff.valueB.asInt(); break;
-                        case JsonValueType::Double: std::cout << diff.valueB.asDouble(); break;
-                        case JsonValueType::Bool: std::cout << (diff.valueB.asBool() ? "true" : "false"); break;
-                        case JsonValueType::Null: std::cout << "null"; break;
-                    }
-                    std::cout << std::endl;
+                // 转换差异类型名称
+                std::string diffType;
+                if (diff.differenceType == "missing_in_A") {
+                    diffType = "MISSING_IN_A";
+                } else if (diff.differenceType == "missing_in_B") {
+                    diffType = "MISSING_IN_B";
+                } else if (diff.differenceType == "value_different") {
+                    diffType = "VALUE_DIFFERENT";
+                } else if (diff.differenceType == "type_mismatch") {
+                    diffType = "TYPE_MISMATCH";
+                } else {
+                    diffType = diff.differenceType;
                 }
+
+                // 格式化A侧值
+                std::string valueAStr = "null";
+                if (diff.existsInA) {
+                    switch (diff.valueA.getType()) {
+                        case JsonValueType::String:
+                            valueAStr = "\"" + diff.valueA.asString() + "\"";
+                            break;
+                        case JsonValueType::Int:
+                            valueAStr = std::to_string(diff.valueA.asInt());
+                            break;
+                        case JsonValueType::Double:
+                            valueAStr = std::to_string(diff.valueA.asDouble());
+                            break;
+                        case JsonValueType::Bool:
+                            valueAStr = diff.valueA.asBool() ? "true" : "false";
+                            break;
+                        case JsonValueType::Null:
+                            valueAStr = "null";
+                            break;
+                        case JsonValueType::Array:
+                        case JsonValueType::Object:
+                            valueAStr = "[复杂类型]";
+                            break;
+                        default:
+                            valueAStr = "[未知类型]";
+                            break;
+                    }
+                }
+
+                // 格式化B侧值
+                std::string valueBStr = "null";
+                if (diff.existsInB) {
+                    switch (diff.valueB.getType()) {
+                        case JsonValueType::String:
+                            valueBStr = "\"" + diff.valueB.asString() + "\"";
+                            break;
+                        case JsonValueType::Int:
+                            valueBStr = std::to_string(diff.valueB.asInt());
+                            break;
+                        case JsonValueType::Double:
+                            valueBStr = std::to_string(diff.valueB.asDouble());
+                            break;
+                        case JsonValueType::Bool:
+                            valueBStr = diff.valueB.asBool() ? "true" : "false";
+                            break;
+                        case JsonValueType::Null:
+                            valueBStr = "null";
+                            break;
+                        case JsonValueType::Array:
+                        case JsonValueType::Object:
+                            valueBStr = "[复杂类型]";
+                            break;
+                        default:
+                            valueBStr = "[未知类型]";
+                            break;
+                    }
+                }
+
+                // 输出表格化的行（使用左对齐格式）
+                std::cout << std::left
+                          << std::setw(16) << diff.fieldName
+                          << std::setw(16) << diffType
+                          << std::setw(28) << valueAStr
+                          << valueBStr << std::endl;
             }
+            std::cout << std::endl;
+        } else if (detail.identical) {
+            std::cout << "记录完全相同，无字段差异。" << std::endl << std::endl;
         }
     }
 }
