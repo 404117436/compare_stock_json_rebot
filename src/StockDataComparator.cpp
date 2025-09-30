@@ -26,8 +26,8 @@ void StockDataComparator::setDataB(std::vector<StockDataContainer>&& data) {
 
 // 生成记录的唯一键
 std::string StockDataComparator::generateRecordKey(const StockDataContainer& container) const {
-    // 简化版：使用code + indexValue作为分组标识
-    return container.getCode() + container.getIndexValue();
+    // 简化版：使用code + "_" + indexValue作为分组标识
+    return container.getCode() + "_" + container.getIndexValue();
 }
 
 

@@ -27,7 +27,7 @@ struct FieldDifference {
 struct RecordComparisonDetail {
     bool identical;                             // 是否完全相同
     std::vector<FieldDifference> differences;   // 字段差异列表
-    std::string recordKey;                      // 记录键(code+indexValue)
+    std::string recordKey;                      // 记录键(code_indexValue)
 
     RecordComparisonDetail() : identical(false) {}
 };

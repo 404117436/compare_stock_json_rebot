@@ -200,12 +200,13 @@ void printComparisonSummary(const ComparisonResult& result) {
     }
 }
 
-// 从 recordKey 提取 code（前6位字符）
+// 从 recordKey 提取 code（下划线分隔符之前的部分）
 std::string extractCodeFromRecordKey(const std::string& recordKey) {
-    if (recordKey.length() >= 6) {
-        return recordKey.substr(0, 6);
+    size_t underscorePos = recordKey.find('_');
+    if (underscorePos != std::string::npos) {
+        return recordKey.substr(0, underscorePos);
     }
-    return recordKey;  // 如果长度不足6位，返回原字符串
+    return recordKey;  // 如果没有找到下划线，返回原字符串作为回退
 }
 
 // 验证文件是否存在且可读
@@ -268,10 +269,11 @@ std::string generateCodeDifferenceReport(const std::string& code,
 
         report << "记录 " << recordIndex << " [" << record.recordKey << "]" << std::endl;
 
-        // 从 recordKey 提取时间部分（后6位）
+        // 从 recordKey 提取时间部分（下划线分隔符之后的部分）
         std::string timeValue = "未知";
-        if (record.recordKey.length() >= 12) {
-            timeValue = record.recordKey.substr(6);
+        size_t underscorePos = record.recordKey.find('_');
+        if (underscorePos != std::string::npos && underscorePos + 1 < record.recordKey.length()) {
+            timeValue = record.recordKey.substr(underscorePos + 1);
         }
         report << "时间: " << timeValue << std::endl;
         report << "状态: " << (record.identical ? "相同" : "有差异") << std::endl;
