@@ -17,7 +17,7 @@ private:
     std::string filePath_;                           // 文件路径
     std::unique_ptr<LineReader> lineReader_;         // 行读取器
     size_t maxMemorySize_;                           // 内存软上限（字节）
-    int64_t index_decimal_;                          // 索引精度控制，默认1
+    int64_t container_decimal_;                      // 创建容器时使用的精度参数
     std::string indexKey_;                           // 索引字段名称
     std::vector<std::string> ignore_fields_;         // 需要忽略的字段列表
 
@@ -54,10 +54,6 @@ public:
     std::string getFilePath() const { return filePath_; }
     size_t getCurrentMemoryUsage() const;                                  // 计算当前内存使用
 
-    // 精度控制
-    int64_t getIndexDecimal() const { return index_decimal_; }            // 获取索引精度
-    void setIndexDecimal(int64_t decimal);                                // 设置索引精度
-    int64_t convertIndexToComparableValue(const std::string& indexValue) const;   // 公开转换方法供测试使用
 
     // 索引字段控制
     const std::string& getIndexKey() const { return indexKey_; }          // 获取索引字段名

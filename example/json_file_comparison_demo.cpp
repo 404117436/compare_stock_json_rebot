@@ -142,7 +142,7 @@ void printFileInfo(const std::vector<StockDataContainer>& data, const std::strin
 
     for (const auto& container : data) {
         codeStats[container.getCode()]++;
-        timeStats[container.getIndexValue()]++;
+        timeStats[std::to_string(container.getIndexValue())]++;
     }
 
     std::cout << "股票代码分布: ";
@@ -402,7 +402,7 @@ void writeDifferencesToFiles(const ComparisonResult& result, const std::string& 
 // 获取批次的时间戳数值
 int64_t getBatchTimestamp(const std::vector<StockDataContainer>& batch, const StockDataBatchReader& reader) {
     if (batch.empty()) return 0;
-    return reader.convertIndexToComparableValue(batch[0].getIndexValue());
+    return batch[0].getIndexValue();
 }
 
 // 为单条记录生成差异报告
@@ -513,7 +513,7 @@ void writeRecordToFile(const RecordComparisonDetail& detail, const std::string& 
 // 创建MISS记录的差异详情
 RecordComparisonDetail createMissRecord(const StockDataContainer& record, bool missingInA) {
     RecordComparisonDetail detail;
-    detail.recordKey = record.getCode() + "_" + record.getIndexValue();
+    detail.recordKey = record.getCode() + "_" + std::to_string(record.getIndexValue());
     detail.identical = false;
 
     if (missingInA) {

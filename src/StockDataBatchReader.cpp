@@ -4,7 +4,7 @@
 
 // 构造函数
 StockDataBatchReader::StockDataBatchReader(const std::string& filePath, const std::string& indexKey, size_t maxMemorySize, int64_t indexDecimal, const std::vector<std::string>& ignoreFields)
-    : filePath_(filePath), maxMemorySize_(maxMemorySize), index_decimal_(indexDecimal), indexKey_(indexKey), ignore_fields_(ignoreFields), hasPendingData_(false) {
+    : filePath_(filePath), maxMemorySize_(maxMemorySize), container_decimal_(indexDecimal), indexKey_(indexKey), ignore_fields_(ignoreFields), hasPendingData_(false) {
 
     try {
         lineReader_ = std::unique_ptr<LineReader>(new LineReader(filePath_));
@@ -27,7 +27,8 @@ size_t StockDataBatchReader::readNextBatch() {
     // 1. 优先处理临界数据
     if (hasPendingData_) {
         pendingData_.setIndexKey(indexKey_);  // 确保使用正确的索引字段
-        currentBatchValue = convertIndexToComparableValue(pendingData_.getIndexValue());
+        pendingData_.setIndexDecimal(container_decimal_);  // 确保使用正确的精度
+        currentBatchValue = pendingData_.getIndexValue();
         dataQueue_.push_back(std::move(pendingData_));
         hasPendingData_ = false;
         batchStarted = true;
@@ -37,7 +38,7 @@ size_t StockDataBatchReader::readNextBatch() {
     // 2. 循环读取数据
     StockDataContainer newData;
     while (readSingleRecord(newData)) {
-        int64_t newIndexValue = convertIndexToComparableValue(newData.getIndexValue());
+        int64_t newIndexValue = newData.getIndexValue();
 
         // 检查是否开始新批次
         if (batchStarted && newIndexValue != currentBatchValue) {
@@ -80,7 +81,7 @@ bool StockDataBatchReader::readSingleRecord(StockDataContainer& container) {
         }
 
         // 创建新容器并设置索引字段
-        container = StockDataContainer("BatchData", indexKey_);
+        container = StockDataContainer("BatchData", indexKey_, container_decimal_);
 
         // 解析JSON
         bool parseSuccess = false;
@@ -115,7 +116,7 @@ size_t StockDataBatchReader::getCurrentMemoryUsage() const {
         totalSize += sizeof(StockDataContainer);
         // 字符串成员变量大小
         totalSize += container.getCode().size();
-        totalSize += container.getIndexValue().size();
+        totalSize += sizeof(int64_t);  // getIndexValue()现在是int64_t类型
         totalSize += container.getIndexKey().size();
     }
 
@@ -124,7 +125,7 @@ size_t StockDataBatchReader::getCurrentMemoryUsage() const {
         totalSize += pendingData_.getRawJson().size();
         totalSize += sizeof(StockDataContainer);
         totalSize += pendingData_.getCode().size();
-        totalSize += pendingData_.getIndexValue().size();
+        totalSize += sizeof(int64_t);  // getIndexValue()现在是int64_t类型
         totalSize += pendingData_.getIndexKey().size();
     }
 
@@ -150,11 +151,11 @@ bool StockDataBatchReader::popBatch(std::vector<StockDataContainer>& result) {
     }
 
     // 3. 执行原有的批次提取逻辑
-    int64_t currentBatchValue = convertIndexToComparableValue(dataQueue_.front().getIndexValue());
+    int64_t currentBatchValue = dataQueue_.front().getIndexValue();
 
     // 只取出index_value_相同的连续数据
     while (!dataQueue_.empty() &&
-           convertIndexToComparableValue(dataQueue_.front().getIndexValue()) == currentBatchValue) {
+           dataQueue_.front().getIndexValue() == currentBatchValue) {
         result.push_back(std::move(dataQueue_.front()));
         dataQueue_.pop_front();
     }
@@ -169,11 +170,11 @@ std::vector<StockDataContainer> StockDataBatchReader::getBatch() const {
     }
 
     std::vector<StockDataContainer> result;
-    int64_t currentBatchValue = convertIndexToComparableValue(dataQueue_.front().getIndexValue());
+    int64_t currentBatchValue = dataQueue_.front().getIndexValue();
 
     // 只复制index_value_相同的连续数据
     for (const auto& container : dataQueue_) {
-        if (convertIndexToComparableValue(container.getIndexValue()) == currentBatchValue) {
+        if (container.getIndexValue() == currentBatchValue) {
             result.push_back(container);
         } else {
             break;  // 遇到不同批次，停止复制
@@ -190,7 +191,7 @@ bool StockDataBatchReader::hasCompleteBatch() const {
     }
 
     // 检查队列中是否至少有一个完整的批次
-    int64_t firstBatchValue = convertIndexToComparableValue(dataQueue_.front().getIndexValue());
+    int64_t firstBatchValue = dataQueue_.front().getIndexValue();
 
     // 如果只有一个元素且没有更多数据，也算完整批次
     if (dataQueue_.size() == 1 && !lineReader_->hasNextLine() && !hasPendingData_) {
@@ -199,13 +200,13 @@ bool StockDataBatchReader::hasCompleteBatch() const {
 
     // 检查是否有多个不同的批次值（表示至少有一个完整批次）
     for (const auto& container : dataQueue_) {
-        if (convertIndexToComparableValue(container.getIndexValue()) != firstBatchValue) {
+        if (container.getIndexValue() != firstBatchValue) {
             return true;
         }
     }
 
     // 如果有临界数据且与当前批次不同，也表示当前批次完整
-    if (hasPendingData_ && convertIndexToComparableValue(pendingData_.getIndexValue()) != firstBatchValue) {
+    if (hasPendingData_ && pendingData_.getIndexValue() != firstBatchValue) {
         return true;
     }
 
@@ -217,49 +218,6 @@ void StockDataBatchReader::clearBatch() {
     dataQueue_.clear();
 }
 
-// 设置索引精度
-void StockDataBatchReader::setIndexDecimal(int64_t decimal) {
-    if (decimal <= 0) {
-        std::cerr << "警告：索引精度必须为正数，已设置为默认值1" << std::endl;
-        index_decimal_ = 1;
-    } else {
-        index_decimal_ = decimal;
-    }
-}
-
-// 将索引值转换为可比较的数值
-int64_t StockDataBatchReader::convertIndexToComparableValue(const std::string& indexValue) const {
-    try {
-        if (indexValue.empty()) {
-            return 0;
-        }
-
-        // 移除前导空格
-        std::string trimmedValue = indexValue;
-        size_t start = trimmedValue.find_first_not_of(" \t");
-        if (start != std::string::npos) {
-            trimmedValue = trimmedValue.substr(start);
-        } else {
-            return 0; // 全是空格
-        }
-
-        // 转换为int64_t
-        int64_t value = std::stoll(trimmedValue);
-
-        // 应用精度除法
-        return value / index_decimal_;
-
-    } catch (const std::invalid_argument& e) {
-        std::cerr << "警告：无法将索引值 '" << indexValue << "' 转换为数字，使用默认值0" << std::endl;
-        return 0;
-    } catch (const std::out_of_range& e) {
-        std::cerr << "警告：索引值 '" << indexValue << "' 超出int64范围，使用默认值0" << std::endl;
-        return 0;
-    } catch (const std::exception& e) {
-        std::cerr << "警告：转换索引值时发生未知错误: " << e.what() << "，使用默认值0" << std::endl;
-        return 0;
-    }
-}
 
 // 将忽略字段转换为逗号分隔字符串
 std::string StockDataBatchReader::joinIgnoreFields() const {
