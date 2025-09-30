@@ -6,6 +6,90 @@
 #include <cstring>
 #include <cmath>
 
+// 列宽计算辅助结构体
+struct ColumnWidths {
+    size_t fieldName;
+    size_t diffType;
+    size_t valueA;
+    size_t valueB;
+
+    ColumnWidths() : fieldName(16), diffType(16), valueA(20), valueB(20) {}
+};
+
+// 格式化差异类型名称
+static std::string getDiffTypeName(const FieldDifference& diff) {
+    if (diff.differenceType == "missing_in_A") {
+        return "MISSING_IN_A";
+    } else if (diff.differenceType == "missing_in_B") {
+        return "MISSING_IN_B";
+    } else if (diff.differenceType == "value_different") {
+        return "VALUE_DIFFERENT";
+    } else if (diff.differenceType == "type_mismatch") {
+        return "TYPE_MISMATCH";
+    } else {
+        return diff.differenceType;
+    }
+}
+
+// 格式化值为字符串
+static std::string formatValueString(const FieldDifference& diff, bool isValueA) {
+    const CustomValue& value = isValueA ? diff.valueA : diff.valueB;
+    bool exists = isValueA ? diff.existsInA : diff.existsInB;
+
+    if (!exists) {
+        return "null";
+    }
+
+    switch (value.getType()) {
+        case JsonValueType::String:
+            return "\"" + value.asString() + "\"";
+        case JsonValueType::Int:
+            return std::to_string(value.asInt());
+        case JsonValueType::Double:
+            return std::to_string(value.asDouble());
+        case JsonValueType::Bool:
+            return value.asBool() ? "true" : "false";
+        case JsonValueType::Null:
+            return "null";
+        case JsonValueType::Array:
+        case JsonValueType::Object:
+            return "[复杂类型]";
+        default:
+            return "[未知类型]";
+    }
+}
+
+// 计算各列的最优宽度
+static ColumnWidths calculateColumnWidths(const std::vector<FieldDifference>& differences) {
+    ColumnWidths widths;
+
+    // 设置标题行的最小宽度
+    widths.fieldName = std::max(widths.fieldName, static_cast<size_t>(16)); // "字段名"
+    widths.diffType = std::max(widths.diffType, static_cast<size_t>(16));   // "差异类型"
+    widths.valueA = std::max(widths.valueA, static_cast<size_t>(20));       // "A侧值"
+    widths.valueB = std::max(widths.valueB, static_cast<size_t>(20));       // "B侧值"
+
+    // 根据实际数据调整宽度
+    for (const auto& diff : differences) {
+        // 字段名宽度
+        widths.fieldName = std::max(widths.fieldName, diff.fieldName.length() + 2);
+
+        // 差异类型宽度
+        std::string diffTypeName = getDiffTypeName(diff);
+        widths.diffType = std::max(widths.diffType, diffTypeName.length() + 2);
+
+        // A侧值宽度
+        std::string valueAStr = formatValueString(diff, true);
+        widths.valueA = std::max(widths.valueA, valueAStr.length() + 2);
+
+        // B侧值宽度
+        std::string valueBStr = formatValueString(diff, false);
+        widths.valueB = std::max(widths.valueB, valueBStr.length() + 2);
+    }
+
+    return widths;
+}
+
 // 数据注入接口 - 拷贝版本
 void StockDataComparator::setDataA(const std::vector<StockDataContainer>& data) {
     a_ = data;
@@ -508,88 +592,33 @@ void ComparisonResult::printDetailedDifferences() const {
         std::cout << std::endl;
 
         if (!detail.identical && !detail.differences.empty()) {
+            // 计算动态列宽
+            ColumnWidths widths = calculateColumnWidths(detail.differences);
+
             std::cout << "字段差异详情 (" << detail.differences.size() << " 个字段):" << std::endl;
-            std::cout << "字段名            差异类型         A侧值                        B侧值" << std::endl;
-            std::cout << "--------------------------------------------------------------------------------" << std::endl;
+
+            // 输出表格标题（使用动态列宽）
+            std::cout << std::left
+                      << std::setw(widths.fieldName) << "字段名"
+                      << std::setw(widths.diffType) << "差异类型"
+                      << std::setw(widths.valueA) << "A侧值"
+                      << "B侧值" << std::endl;
+
+            // 输出分割线（根据总宽度）
+            size_t totalWidth = widths.fieldName + widths.diffType + widths.valueA + widths.valueB;
+            std::cout << std::string(totalWidth, '-') << std::endl;
 
             for (const auto& diff : detail.differences) {
-                // 转换差异类型名称
-                std::string diffType;
-                if (diff.differenceType == "missing_in_A") {
-                    diffType = "MISSING_IN_A";
-                } else if (diff.differenceType == "missing_in_B") {
-                    diffType = "MISSING_IN_B";
-                } else if (diff.differenceType == "value_different") {
-                    diffType = "VALUE_DIFFERENT";
-                } else if (diff.differenceType == "type_mismatch") {
-                    diffType = "TYPE_MISMATCH";
-                } else {
-                    diffType = diff.differenceType;
-                }
+                // 使用辅助函数获取格式化的值
+                std::string diffType = getDiffTypeName(diff);
+                std::string valueAStr = formatValueString(diff, true);
+                std::string valueBStr = formatValueString(diff, false);
 
-                // 格式化A侧值
-                std::string valueAStr = "null";
-                if (diff.existsInA) {
-                    switch (diff.valueA.getType()) {
-                        case JsonValueType::String:
-                            valueAStr = "\"" + diff.valueA.asString() + "\"";
-                            break;
-                        case JsonValueType::Int:
-                            valueAStr = std::to_string(diff.valueA.asInt());
-                            break;
-                        case JsonValueType::Double:
-                            valueAStr = std::to_string(diff.valueA.asDouble());
-                            break;
-                        case JsonValueType::Bool:
-                            valueAStr = diff.valueA.asBool() ? "true" : "false";
-                            break;
-                        case JsonValueType::Null:
-                            valueAStr = "null";
-                            break;
-                        case JsonValueType::Array:
-                        case JsonValueType::Object:
-                            valueAStr = "[复杂类型]";
-                            break;
-                        default:
-                            valueAStr = "[未知类型]";
-                            break;
-                    }
-                }
-
-                // 格式化B侧值
-                std::string valueBStr = "null";
-                if (diff.existsInB) {
-                    switch (diff.valueB.getType()) {
-                        case JsonValueType::String:
-                            valueBStr = "\"" + diff.valueB.asString() + "\"";
-                            break;
-                        case JsonValueType::Int:
-                            valueBStr = std::to_string(diff.valueB.asInt());
-                            break;
-                        case JsonValueType::Double:
-                            valueBStr = std::to_string(diff.valueB.asDouble());
-                            break;
-                        case JsonValueType::Bool:
-                            valueBStr = diff.valueB.asBool() ? "true" : "false";
-                            break;
-                        case JsonValueType::Null:
-                            valueBStr = "null";
-                            break;
-                        case JsonValueType::Array:
-                        case JsonValueType::Object:
-                            valueBStr = "[复杂类型]";
-                            break;
-                        default:
-                            valueBStr = "[未知类型]";
-                            break;
-                    }
-                }
-
-                // 输出表格化的行（使用左对齐格式）
+                // 输出表格化的行（使用动态列宽）
                 std::cout << std::left
-                          << std::setw(16) << diff.fieldName
-                          << std::setw(16) << diffType
-                          << std::setw(28) << valueAStr
+                          << std::setw(widths.fieldName) << diff.fieldName
+                          << std::setw(widths.diffType) << diffType
+                          << std::setw(widths.valueA) << valueAStr
                           << valueBStr << std::endl;
             }
             std::cout << std::endl;
