@@ -502,8 +502,8 @@ bool GenericJsonContainer::parseFromJsonParser(const JsonParser& parser, const s
         auto root = parser.getRoot();
 
         if (root.isObject()) {
-            // 解析忽略字段集合
-            std::set<std::string> ignoreFieldsSet = parseIgnoreFields(ignore_fields);
+            // 解析忽略字段集合（unordered_set提供O(1)查找）
+            std::unordered_set<std::string> ignoreFieldsSet = parseIgnoreFields(ignore_fields);
             auto keys = root.getKeys();
             for (const auto& key : keys) {
                 // 跳过需要忽略的字段
@@ -793,12 +793,18 @@ void printJsonValueType(JsonValueType type) {
 
 // ==================== 字段忽略功能实现 ====================
 
-// 解析忽略字段字符串，将"key1,key2,key3"格式转换为set<string>
-std::set<std::string> GenericJsonContainer::parseIgnoreFields(const std::string& ignore_fields) const {
-    std::set<std::string> result;
+// 解析忽略字段字符串，将"key1,key2,key3"格式转换为unordered_set<string>（O(1)查找）
+std::unordered_set<std::string> GenericJsonContainer::parseIgnoreFields(const std::string& ignore_fields) const {
+    std::unordered_set<std::string> result;
 
     if (ignore_fields.empty()) {
         return result;  // 空字符串返回空集合
+    }
+
+    // 预估字段数量，预分配空间（假设平均字段名10字符）
+    size_t estimatedFields = ignore_fields.size() / 10;
+    if (estimatedFields > 0) {
+        result.reserve(estimatedFields);
     }
 
     std::stringstream ss(ignore_fields);
@@ -822,7 +828,7 @@ std::set<std::string> GenericJsonContainer::parseIgnoreFields(const std::string&
 }
 
 // 支持忽略字段的JSON值解析
-CustomValue GenericJsonContainer::parseJsonValue(const JsonValue& jsonValue, const std::set<std::string>& ignoreFields) {
+CustomValue GenericJsonContainer::parseJsonValue(const JsonValue& jsonValue, const std::unordered_set<std::string>& ignoreFields) {
     if (jsonValue.isNull()) {
         return CustomValue::createNull();
     } else if (jsonValue.isBool()) {
@@ -847,7 +853,7 @@ CustomValue GenericJsonContainer::parseJsonValue(const JsonValue& jsonValue, con
 }
 
 // 支持忽略字段的JSON对象解析
-void GenericJsonContainer::parseJsonObject(const JsonValue& jsonObj, JsonObjectData& data, const std::set<std::string>& ignoreFields) {
+void GenericJsonContainer::parseJsonObject(const JsonValue& jsonObj, JsonObjectData& data, const std::unordered_set<std::string>& ignoreFields) {
     if (!jsonObj.isObject()) {
         throw GenericJsonException("值不是JSON对象");
     }
@@ -866,7 +872,7 @@ void GenericJsonContainer::parseJsonObject(const JsonValue& jsonObj, JsonObjectD
 }
 
 // 支持忽略字段的JSON数组解析
-void GenericJsonContainer::parseJsonArray(const JsonValue& jsonArray, JsonArrayData& data, const std::set<std::string>& ignoreFields) {
+void GenericJsonContainer::parseJsonArray(const JsonValue& jsonArray, JsonArrayData& data, const std::unordered_set<std::string>& ignoreFields) {
     if (!jsonArray.isArray()) {
         throw GenericJsonException("值不是JSON数组");
     }

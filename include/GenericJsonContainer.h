@@ -3,6 +3,7 @@
 #include <string>
 #include <vector>
 #include <unordered_map>
+#include <unordered_set>
 #include <memory>
 #include <stdexcept>
 #include <iostream>
@@ -214,14 +215,14 @@ public:
 private:
     // 内部辅助方法
     CustomValue parseJsonValue(const JsonValue& jsonValue);
-    CustomValue parseJsonValue(const JsonValue& jsonValue, const std::set<std::string>& ignoreFields);
+    CustomValue parseJsonValue(const JsonValue& jsonValue, const std::unordered_set<std::string>& ignoreFields);
     void parseJsonObject(const JsonValue& jsonObj, JsonObjectData& data);
-    void parseJsonObject(const JsonValue& jsonObj, JsonObjectData& data, const std::set<std::string>& ignoreFields);
+    void parseJsonObject(const JsonValue& jsonObj, JsonObjectData& data, const std::unordered_set<std::string>& ignoreFields);
     void parseJsonArray(const JsonValue& jsonArray, JsonArrayData& data);
-    void parseJsonArray(const JsonValue& jsonArray, JsonArrayData& data, const std::set<std::string>& ignoreFields);
+    void parseJsonArray(const JsonValue& jsonArray, JsonArrayData& data, const std::unordered_set<std::string>& ignoreFields);
 
-    // 字段忽略相关辅助方法
-    std::set<std::string> parseIgnoreFields(const std::string& ignore_fields) const;
+    // 字段忽略相关辅助方法（使用 unordered_set 提升查找性能）
+    std::unordered_set<std::string> parseIgnoreFields(const std::string& ignore_fields) const;
 };
 
 // 异常类

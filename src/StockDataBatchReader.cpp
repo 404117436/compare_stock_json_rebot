@@ -6,6 +6,9 @@
 StockDataBatchReader::StockDataBatchReader(const std::string& filePath, const std::string& indexKey, int64_t indexDecimal, const std::vector<std::string>& ignoreFields)
     : filePath_(filePath), maxMemorySize_(MEM_SIZE), container_decimal_(indexDecimal), indexKey_(indexKey), ignore_fields_(ignoreFields), hasPendingData_(false) {
 
+    // 预计算忽略字段缓存（性能优化）
+    rebuildIgnoreCache();
+
     try {
         lineReader_ = std::unique_ptr<LineReader>(new LineReader(filePath_));
     } catch (const std::exception& e) {
@@ -83,13 +86,12 @@ bool StockDataBatchReader::readSingleRecord(StockDataContainer& container) {
         // 创建新容器并设置索引字段
         container = StockDataContainer("BatchData", indexKey_, container_decimal_);
 
-        // 解析JSON
+        // 解析JSON（使用预计算的缓存字符串，避免每次重建）
         bool parseSuccess = false;
         if (ignore_fields_.empty()) {
             parseSuccess = container.parseFromJsonString(jsonLine);
         } else {
-            std::string ignoreFieldsStr = joinIgnoreFields();
-            parseSuccess = container.parseFromJsonString(jsonLine, ignoreFieldsStr);
+            parseSuccess = container.parseFromJsonString(jsonLine, cached_ignore_string_);
         }
 
         if (parseSuccess) {
@@ -235,9 +237,46 @@ std::string StockDataBatchReader::joinIgnoreFields() const {
     return result;
 }
 
+// 重建忽略字段缓存（性能优化）
+void StockDataBatchReader::rebuildIgnoreCache() {
+    // 清空旧缓存
+    cached_ignore_string_.clear();
+    cached_ignore_set_.clear();
+
+    if (ignore_fields_.empty()) {
+        return;
+    }
+
+    // 1. 构建 set 缓存（用于快速查找）
+    cached_ignore_set_ = std::set<std::string>(
+        ignore_fields_.begin(),
+        ignore_fields_.end()
+    );
+
+    // 2. 构建字符串缓存（用于传递给 parseFromJsonString）
+    // 优化：预先计算总长度，避免多次重分配
+    size_t totalLen = 0;
+    for (const auto& field : ignore_fields_) {
+        totalLen += field.size();
+    }
+    if (!ignore_fields_.empty()) {
+        totalLen += (ignore_fields_.size() - 1);  // 逗号数量
+    }
+
+    cached_ignore_string_.reserve(totalLen);  // 预分配内存
+
+    for (size_t i = 0; i < ignore_fields_.size(); ++i) {
+        if (i > 0) {
+            cached_ignore_string_ += ',';
+        }
+        cached_ignore_string_ += ignore_fields_[i];
+    }
+}
+
 // 字段过滤控制方法
 void StockDataBatchReader::setIgnoreFields(const std::vector<std::string>& fields) {
     ignore_fields_ = fields;
+    rebuildIgnoreCache();  // 触发缓存重建
 }
 
 void StockDataBatchReader::addIgnoreField(const std::string& field) {
@@ -248,11 +287,13 @@ void StockDataBatchReader::addIgnoreField(const std::string& field) {
         }
     }
     ignore_fields_.push_back(field);
+    rebuildIgnoreCache();  // 触发缓存重建
 }
 
 void StockDataBatchReader::removeIgnoreField(const std::string& field) {
     auto it = std::find(ignore_fields_.begin(), ignore_fields_.end(), field);
     if (it != ignore_fields_.end()) {
         ignore_fields_.erase(it);
+        rebuildIgnoreCache();  // 触发缓存重建
     }
 }

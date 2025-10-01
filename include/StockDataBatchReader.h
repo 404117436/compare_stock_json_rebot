@@ -24,6 +24,10 @@ private:
     std::string indexKey_;                           // 索引字段名称
     std::vector<std::string> ignore_fields_;         // 需要忽略的字段列表
 
+    // 忽略字段缓存（性能优化：避免每次记录都重建）
+    std::string cached_ignore_string_;               // 预计算的逗号分隔字符串
+    std::set<std::string> cached_ignore_set_;        // 预计算的字段集合
+
     // 临界数据处理
     StockDataContainer pendingData_;                 // 缓存的临界数据
     bool hasPendingData_;                           // 是否有待处理数据
@@ -31,6 +35,7 @@ private:
     // 内部辅助方法
     bool readSingleRecord(StockDataContainer& container); // 读取单条记录
     std::string joinIgnoreFields() const;            // 将忽略字段转换为逗号分隔字符串
+    void rebuildIgnoreCache();                       // 重建忽略字段缓存
 
 public:
     // 构造函数
