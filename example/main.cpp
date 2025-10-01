@@ -12,6 +12,7 @@
 #include <cstdio>
 #include <sys/stat.h>
 #include <sys/types.h>
+#include <chrono>
 #include "StockDataComparator.h"
 #include "StockDataBatchReader.h"
 
@@ -813,18 +814,11 @@ int main(int argc, char* argv[]) {
         demonstrateJsonFileComparison(fileA, fileB, outputDir, ignoreFields, indexDecimal);
 
     } catch (const std::exception& e) {
-        std::cerr << "❌ Demo执行失败: " << e.what() << std::endl;
+        std::cerr << "❌ 执行失败: " << e.what() << std::endl;
         return 1;
     }
 
-    std::cout << "\n🎉 Demo执行成功完成!" << std::endl;
-    std::cout << "\n该Demo展示了以下关键功能:" << std::endl;
-    std::cout << "  • StockDataBatchReader: 高效批量JSON文件读取" << std::endl;
-    std::cout << "  • StockDataComparator: 详细字段级差异分析" << std::endl;
-    std::cout << "  • 自动数据补充: popBatch()的智能数据管理" << std::endl;
-    std::cout << "  • 完整差异报告: 字段存在性、类型、值的全面对比" << std::endl;
-    std::cout << "  • 按Code分组输出: 自动按股票代码生成独立差异文件" << std::endl;
-    std::cout << "  • 灵活文件输出: 支持自定义输出目录路径" << std::endl;
+    std::cout << "\n🎉 执行成功完成!" << std::endl;
 
     return 0;
 }
