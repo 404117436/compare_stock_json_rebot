@@ -461,11 +461,15 @@ bool GenericJsonContainer::parseFromJsonString(const std::string& jsonStr) {
 
 bool GenericJsonContainer::parseFromJsonParser(const JsonParser& parser) {
     try {
-        data_.clear();
+        data_map_.clear();
         auto root = parser.getRoot();
 
         if (root.isObject()) {
-            parseJsonObject(root, data_);
+            auto keys = root.getKeys();
+            for (const auto& key : keys) {
+                auto value = root[key];
+                data_map_.emplace(key, parseJsonValue(value));  // O(1) 插入
+            }
             return true;
         } else {
             std::cerr << "根节点不是JSON对象" << std::endl;
@@ -494,13 +498,21 @@ bool GenericJsonContainer::parseFromJsonString(const std::string& jsonStr, const
 // 从JsonParser解析（支持忽略指定字段）
 bool GenericJsonContainer::parseFromJsonParser(const JsonParser& parser, const std::string& ignore_fields) {
     try {
-        data_.clear();
+        data_map_.clear();
         auto root = parser.getRoot();
 
         if (root.isObject()) {
             // 解析忽略字段集合
             std::set<std::string> ignoreFieldsSet = parseIgnoreFields(ignore_fields);
-            parseJsonObject(root, data_, ignoreFieldsSet);
+            auto keys = root.getKeys();
+            for (const auto& key : keys) {
+                // 跳过需要忽略的字段
+                if (ignoreFieldsSet.count(key) > 0) {
+                    continue;
+                }
+                auto value = root[key];
+                data_map_.emplace(key, parseJsonValue(value, ignoreFieldsSet));  // O(1) 插入
+            }
             return true;
         } else {
             std::cerr << "根节点不是JSON对象" << std::endl;
@@ -569,29 +581,24 @@ void GenericJsonContainer::parseJsonArray(const JsonValue& jsonArray, JsonArrayD
 
 // 键值对操作
 void GenericJsonContainer::setValue(const std::string& key, const CustomValue& value) {
-    auto it = findKey(key);
-    if (it != data_.end()) {
-        it->second = value;
-    } else {
-        data_.push_back(std::make_pair(key, value));
-    }
+    data_map_[key] = value;  // O(1) 插入或更新
 }
 
 bool GenericJsonContainer::hasKey(const std::string& key) const {
-    return findKey(key) != data_.end();
+    return data_map_.count(key) > 0;  // O(1) 查找
 }
 
 const CustomValue& GenericJsonContainer::getValue(const std::string& key) const {
-    auto it = findKey(key);
-    if (it != data_.end()) {
+    auto it = data_map_.find(key);  // O(1) 查找
+    if (it != data_map_.end()) {
         return it->second;
     }
     throw GenericJsonException("键 '" + key + "' 不存在");
 }
 
 CustomValue& GenericJsonContainer::getValue(const std::string& key) {
-    auto it = findKey(key);
-    if (it != data_.end()) {
+    auto it = data_map_.find(key);  // O(1) 查找
+    if (it != data_map_.end()) {
         return it->second;
     }
     throw GenericJsonException("键 '" + key + "' 不存在");
@@ -599,7 +606,8 @@ CustomValue& GenericJsonContainer::getValue(const std::string& key) {
 
 std::vector<std::string> GenericJsonContainer::getAllKeys() const {
     std::vector<std::string> keys;
-    for (const auto& pair : data_) {
+    keys.reserve(data_map_.size());
+    for (const auto& pair : data_map_) {
         keys.push_back(pair.first);
     }
     return keys;
@@ -607,14 +615,7 @@ std::vector<std::string> GenericJsonContainer::getAllKeys() const {
 
 // 操作符重载
 CustomValue& GenericJsonContainer::operator[](const std::string& key) {
-    auto it = findKey(key);
-    if (it != data_.end()) {
-        return it->second;
-    }
-
-    // 键不存在，创建一个null值
-    data_.push_back(std::make_pair(key, CustomValue::createNull()));
-    return data_.back().second;
+    return data_map_[key];  // O(1) 访问，不存在时自动创建默认值
 }
 
 const CustomValue& GenericJsonContainer::operator[](const std::string& key) const {
@@ -622,41 +623,25 @@ const CustomValue& GenericJsonContainer::operator[](const std::string& key) cons
 }
 
 // 查找操作
-JsonObjectData::iterator GenericJsonContainer::find(const std::string& key) {
-    return findKey(key);
+std::unordered_map<std::string, CustomValue>::iterator GenericJsonContainer::find(const std::string& key) {
+    return data_map_.find(key);  // O(1) 查找
 }
 
-JsonObjectData::const_iterator GenericJsonContainer::find(const std::string& key) const {
-    return findKey(key);
-}
-
-// 内部查找方法
-JsonObjectData::iterator GenericJsonContainer::findKey(const std::string& key) {
-    return std::find_if(data_.begin(), data_.end(),
-        [&key](const JsonKeyValuePair& pair) { return pair.first == key; });
-}
-
-JsonObjectData::const_iterator GenericJsonContainer::findKey(const std::string& key) const {
-    return std::find_if(data_.begin(), data_.end(),
-        [&key](const JsonKeyValuePair& pair) { return pair.first == key; });
+std::unordered_map<std::string, CustomValue>::const_iterator GenericJsonContainer::find(const std::string& key) const {
+    return data_map_.find(key);  // O(1) 查找
 }
 
 // 删除操作
 bool GenericJsonContainer::removeKey(const std::string& key) {
-    auto it = findKey(key);
-    if (it != data_.end()) {
-        data_.erase(it);
-        return true;
-    }
-    return false;
+    return data_map_.erase(key) > 0;  // O(1) 删除，返回删除的元素数量
 }
 
 // 输出方法
 void GenericJsonContainer::print() const {
     std::cout << "=== GenericJsonContainer (" << source_ << ") ===" << std::endl;
-    std::cout << "键值对数量: " << data_.size() << std::endl;
+    std::cout << "键值对数量: " << data_map_.size() << std::endl;
 
-    for (const auto& pair : data_) {
+    for (const auto& pair : data_map_) {
         std::cout << "\"" << pair.first << "\": ";
         std::cout << pair.second.toString() << std::endl;
     }
@@ -664,9 +649,9 @@ void GenericJsonContainer::print() const {
 
 void GenericJsonContainer::printDetailed() const {
     std::cout << "=== 详细信息 (" << source_ << ") ===" << std::endl;
-    std::cout << "键值对数量: " << data_.size() << std::endl;
+    std::cout << "键值对数量: " << data_map_.size() << std::endl;
 
-    for (const auto& pair : data_) {
+    for (const auto& pair : data_map_) {
         std::cout << "\n键: \"" << pair.first << "\"" << std::endl;
         std::cout << "类型: " << jsonValueTypeToString(pair.second.getType()) << std::endl;
         std::cout << "值: ";
@@ -678,19 +663,20 @@ void GenericJsonContainer::printDetailed() const {
 void GenericJsonContainer::printKeyValuePairs() const {
     std::cout << "=== 键值对列表 (" << source_ << ") ===" << std::endl;
 
-    for (size_t i = 0; i < data_.size(); ++i) {
-        const auto& pair = data_[i];
+    size_t i = 0;
+    for (const auto& pair : data_map_) {
         std::cout << "[" << i << "] \"" << pair.first << "\" => "
                   << jsonValueTypeToString(pair.second.getType())
                   << " (" << pair.second.toString() << ")" << std::endl;
+        ++i;
     }
 }
 
 std::string GenericJsonContainer::toString() const {
     std::stringstream ss;
-    ss << "GenericJsonContainer(" << source_ << "): " << data_.size() << " pairs\n";
+    ss << "GenericJsonContainer(" << source_ << "): " << data_map_.size() << " pairs\n";
 
-    for (const auto& pair : data_) {
+    for (const auto& pair : data_map_) {
         ss << "  \"" << pair.first << "\": " << pair.second.toString() << "\n";
     }
 
@@ -701,10 +687,11 @@ std::string GenericJsonContainer::toJsonString() const {
     std::stringstream ss;
     ss << "{";
 
-    for (size_t i = 0; i < data_.size(); ++i) {
+    size_t i = 0;
+    for (const auto& pair : data_map_) {
         if (i > 0) ss << ",";
-        const auto& pair = data_[i];
         ss << "\"" << pair.first << "\":" << pair.second.toJsonString();
+        ++i;
     }
 
     ss << "}";
@@ -714,7 +701,7 @@ std::string GenericJsonContainer::toJsonString() const {
 // 统计信息
 void GenericJsonContainer::printStatistics() const {
     std::cout << "\n=== 统计信息 (" << source_ << ") ===" << std::endl;
-    std::cout << "总键值对数: " << data_.size() << std::endl;
+    std::cout << "总键值对数: " << data_map_.size() << std::endl;
 
     std::cout << "类型分布:" << std::endl;
     std::cout << "  Null: " << countByType(JsonValueType::Null) << std::endl;
@@ -728,7 +715,7 @@ void GenericJsonContainer::printStatistics() const {
 
 size_t GenericJsonContainer::countByType(JsonValueType type) const {
     size_t count = 0;
-    for (const auto& pair : data_) {
+    for (const auto& pair : data_map_) {
         if (pair.second.getType() == type) {
             count++;
         }
@@ -767,7 +754,7 @@ bool GenericJsonContainer::exportToJson(const std::string& filename) const {
 
 // 批量操作
 void GenericJsonContainer::merge(const GenericJsonContainer& other) {
-    for (const auto& pair : other.data_) {
+    for (const auto& pair : other.data_map_) {
         setValue(pair.first, pair.second);
     }
 }

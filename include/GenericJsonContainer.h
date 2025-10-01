@@ -2,6 +2,7 @@
 
 #include <string>
 #include <vector>
+#include <unordered_map>
 #include <memory>
 #include <stdexcept>
 #include <iostream>
@@ -128,11 +129,11 @@ public:
     static CustomValue createArray();
 };
 
-// 通用JSON容器类，使用vector<pair<string, CustomValue>>存储
+// 通用JSON容器类，使用unordered_map<string, CustomValue>存储
 class GenericJsonContainer {
 private:
-    JsonObjectData data_;               // 主要存储：vector<pair<string, CustomValue>>
-    std::string source_;                // 数据源信息
+    std::unordered_map<std::string, CustomValue> data_map_;  // 主要存储：哈希表实现O(1)查找
+    std::string source_;                                     // 数据源信息
 
 public:
     // 构造函数
@@ -155,9 +156,9 @@ public:
     bool parseFromJsonParser(const JsonParser& parser, const std::string& ignore_fields);
 
     // 数据访问方法
-    size_t size() const { return data_.size(); }
-    bool empty() const { return data_.empty(); }
-    void clear() { data_.clear(); }
+    size_t size() const { return data_map_.size(); }
+    bool empty() const { return data_map_.empty(); }
+    void clear() { data_map_.clear(); }
 
     // 键值对操作
     void setValue(const std::string& key, const CustomValue& value);
@@ -169,20 +170,20 @@ public:
     std::vector<std::string> getAllKeys() const;
 
     // 迭代器支持
-    JsonObjectData::iterator begin() { return data_.begin(); }
-    JsonObjectData::iterator end() { return data_.end(); }
-    JsonObjectData::const_iterator begin() const { return data_.begin(); }
-    JsonObjectData::const_iterator end() const { return data_.end(); }
-    JsonObjectData::const_iterator cbegin() const { return data_.cbegin(); }
-    JsonObjectData::const_iterator cend() const { return data_.cend(); }
+    std::unordered_map<std::string, CustomValue>::iterator begin() { return data_map_.begin(); }
+    std::unordered_map<std::string, CustomValue>::iterator end() { return data_map_.end(); }
+    std::unordered_map<std::string, CustomValue>::const_iterator begin() const { return data_map_.begin(); }
+    std::unordered_map<std::string, CustomValue>::const_iterator end() const { return data_map_.end(); }
+    std::unordered_map<std::string, CustomValue>::const_iterator cbegin() const { return data_map_.cbegin(); }
+    std::unordered_map<std::string, CustomValue>::const_iterator cend() const { return data_map_.cend(); }
 
     // 操作符重载
     CustomValue& operator[](const std::string& key);
     const CustomValue& operator[](const std::string& key) const;
 
     // 查找操作
-    JsonObjectData::iterator find(const std::string& key);
-    JsonObjectData::const_iterator find(const std::string& key) const;
+    std::unordered_map<std::string, CustomValue>::iterator find(const std::string& key);
+    std::unordered_map<std::string, CustomValue>::const_iterator find(const std::string& key) const;
 
     // 删除操作
     bool removeKey(const std::string& key);
@@ -221,10 +222,6 @@ private:
 
     // 字段忽略相关辅助方法
     std::set<std::string> parseIgnoreFields(const std::string& ignore_fields) const;
-
-    // 查找键的内部方法
-    JsonObjectData::iterator findKey(const std::string& key);
-    JsonObjectData::const_iterator findKey(const std::string& key) const;
 };
 
 // 异常类
