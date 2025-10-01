@@ -510,51 +510,21 @@ void writeRecordToFile(const RecordComparisonDetail& detail, const std::string& 
     }
 }
 
-// 创建MISS记录的差异详情
-RecordComparisonDetail createMissRecord(const StockDataContainer& record, bool missingInA) {
-    RecordComparisonDetail detail;
-    detail.recordKey = record.getCode() + "_" + std::to_string(record.getIndexValue());
-    detail.identical = false;
-
-    if (missingInA) {
-        detail.raw_json_a = "";
-        detail.raw_json_b = record.getRawJson();
-    } else {
-        detail.raw_json_a = record.getRawJson();
-        detail.raw_json_b = "";
-    }
-
-    // 创建MISS差异记录
-    FieldDifference missDiff;
-    missDiff.fieldName = "RECORD_STATUS";
-    missDiff.differenceType = missingInA ? "missing_in_A" : "missing_in_B";
-    missDiff.existsInA = !missingInA;
-    missDiff.existsInB = missingInA;
-    missDiff.description = missingInA ? "整条记录在A中缺失" : "整条记录在B中缺失";
-
-    // 设置值
-    if (missingInA) {
-        missDiff.valueB = CustomValue("PRESENT");
-    } else {
-        missDiff.valueA = CustomValue("PRESENT");
-    }
-
-    detail.differences.push_back(missDiff);
-    return detail;
-}
 
 // 处理仅在B中存在的数据（A中缺失）
 void processMissInA(const std::vector<StockDataContainer>& batchB, const std::string& outputDir) {
+    StockDataComparator comparator;
     for (const auto& recordB : batchB) {
-        RecordComparisonDetail detail = createMissRecord(recordB, true);
+        RecordComparisonDetail detail = comparator.createMissRecord(recordB, true);
         writeRecordToFile(detail, outputDir);
     }
 }
 
 // 处理仅在A中存在的数据（B中缺失）
 void processMissInB(const std::vector<StockDataContainer>& batchA, const std::string& outputDir) {
+    StockDataComparator comparator;
     for (const auto& recordA : batchA) {
-        RecordComparisonDetail detail = createMissRecord(recordA, false);
+        RecordComparisonDetail detail = comparator.createMissRecord(recordA, false);
         writeRecordToFile(detail, outputDir);
     }
 }

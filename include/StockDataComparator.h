@@ -121,6 +121,9 @@ public:
     std::vector<StockDataContainer> getOnlyInB() const;                   // 获取仅在B中的记录
     std::vector<StockDataContainer> getCommon() const;                    // 获取共同记录
 
+    // MISS记录处理
+    RecordComparisonDetail createMissRecord(const StockDataContainer& record, bool missingInA) const;  // 创建缺失记录的差异详情
+
     // 清理数据
     void clear();                                                         // 清空所有数据
     void clearA();                                                        // 清空数据集A

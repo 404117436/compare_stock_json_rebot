@@ -214,6 +214,39 @@ void StockDataComparator::clearB() {
     b_.clear();
 }
 
+// 创建MISS记录的差异详情
+RecordComparisonDetail StockDataComparator::createMissRecord(const StockDataContainer& record, bool missingInA) const {
+    RecordComparisonDetail detail;
+    detail.recordKey = generateRecordKey(record);
+    detail.identical = false;
+
+    if (missingInA) {
+        detail.raw_json_a = "";
+        detail.raw_json_b = record.getRawJson();
+    } else {
+        detail.raw_json_a = record.getRawJson();
+        detail.raw_json_b = "";
+    }
+
+    // 创建MISS差异记录
+    FieldDifference missDiff;
+    missDiff.fieldName = "RECORD_STATUS";
+    missDiff.differenceType = missingInA ? "MISSING_IN_A" : "MISSING_IN_B";
+    missDiff.existsInA = !missingInA;
+    missDiff.existsInB = missingInA;
+    missDiff.description = missingInA ? "整条记录在A中缺失" : "整条记录在B中缺失";
+
+    // 设置值
+    if (missingInA) {
+        missDiff.valueB = CustomValue("PRESENT");
+    } else {
+        missDiff.valueA = CustomValue("PRESENT");
+    }
+
+    detail.differences.push_back(missDiff);
+    return detail;
+}
+
 // 精确字段比较方法实现
 bool StockDataComparator::compareRecordFields(const StockDataContainer& a, const StockDataContainer& b) const {
     // 1. 基础字段比较
