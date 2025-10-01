@@ -567,8 +567,8 @@ void demonstrateJsonFileComparison(const std::string& fileA, const std::string& 
         std::cout << "\n--- 初始化流式读取器 ---" << std::endl;
 
         // 创建两个流式读取器
-        StockDataBatchReader readerA(fileA, "time", 1024 * 1024, indexDecimal, ignoreFields);
-        StockDataBatchReader readerB(fileB, "time", 1024 * 1024, indexDecimal, ignoreFields);
+        StockDataBatchReader readerA(fileA, "time", indexDecimal, ignoreFields);
+        StockDataBatchReader readerB(fileB, "time", indexDecimal, ignoreFields);
 
         std::cout << "✓ 文件A读取器已创建: " << fileA << std::endl;
         std::cout << "✓ 文件B读取器已创建: " << fileB << std::endl;

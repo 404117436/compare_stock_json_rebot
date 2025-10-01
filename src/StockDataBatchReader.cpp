@@ -3,8 +3,8 @@
 #include <algorithm>
 
 // 构造函数
-StockDataBatchReader::StockDataBatchReader(const std::string& filePath, const std::string& indexKey, size_t maxMemorySize, int64_t indexDecimal, const std::vector<std::string>& ignoreFields)
-    : filePath_(filePath), maxMemorySize_(maxMemorySize), container_decimal_(indexDecimal), indexKey_(indexKey), ignore_fields_(ignoreFields), hasPendingData_(false) {
+StockDataBatchReader::StockDataBatchReader(const std::string& filePath, const std::string& indexKey, int64_t indexDecimal, const std::vector<std::string>& ignoreFields)
+    : filePath_(filePath), maxMemorySize_(MEM_SIZE), container_decimal_(indexDecimal), indexKey_(indexKey), ignore_fields_(ignoreFields), hasPendingData_(false) {
 
     try {
         lineReader_ = std::unique_ptr<LineReader>(new LineReader(filePath_));

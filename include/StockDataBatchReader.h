@@ -7,6 +7,9 @@
 #include <string>
 #include <memory>
 
+// 内存软上限定义：10MB
+#define MEM_SIZE (1024 * 1024 * 10)
+
 /**
  * 股票数据批量读取器
  * 功能：按index_value_连续性批量读取股票数据，支持内存软上限控制
@@ -33,8 +36,7 @@ public:
     // 构造函数
     StockDataBatchReader(const std::string& filePath,
                         const std::string& indexKey = "time",   // 默认使用time作为索引字段
-                        size_t maxMemorySize = 1024 * 1024 * 100,
-                        int64_t indexDecimal = 1,               // 默认1MB内存，精度为1
+                        int64_t indexDecimal = 1,               // 默认精度为1
                         const std::vector<std::string>& ignoreFields = {}); // 默认不忽略任何字段
 
     // 禁用拷贝
