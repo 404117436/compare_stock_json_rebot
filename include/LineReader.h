@@ -14,7 +14,7 @@ public:
 
 class LineReader {
 private:
-    static const size_t DEFAULT_BUFFER_SIZE = 8192;  // 8KB缓冲区
+    static const size_t DEFAULT_BUFFER_SIZE = 65536;  // 64KB缓冲区（优化I/O性能）
 
     FILE* file_;                    // C标准库文件指针
     char* buffer_;                  // 读取缓冲区

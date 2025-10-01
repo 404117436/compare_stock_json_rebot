@@ -269,8 +269,9 @@ bool StockDataComparator::compareRecordFields(const StockDataContainer& a, const
     std::vector<std::string> fieldsA = a.getFieldNames();
     std::vector<std::string> fieldsB = b.getFieldNames();
 
-    // 合并所有字段名，去重
+    // 合并所有字段名，去重（预分配空间减少rehash）
     std::unordered_set<std::string> allFieldNames;
+    allFieldNames.reserve(fieldsA.size() + fieldsB.size());
     for (const auto& field : fieldsA) {
         allFieldNames.insert(field);
     }
@@ -344,11 +345,8 @@ bool StockDataComparator::compareCustomValues(const CustomValue& a, const Custom
 }
 
 bool StockDataComparator::compareStringFields(const std::string& a, const std::string& b) const {
-    // 使用memcmp进行字符串比较
-    if (a.length() != b.length()) {
-        return false;
-    }
-    return std::memcmp(a.c_str(), b.c_str(), a.length()) == 0;
+    // 直接使用operator==，让标准库优化（支持SSE2/AVX2指令和SSO优化）
+    return a == b;
 }
 
 bool StockDataComparator::compareDoubleFields(double a, double b) const {
@@ -374,8 +372,9 @@ RecordComparisonDetail StockDataComparator::compareRecordFieldsDetailed(const St
     std::vector<std::string> fieldsA = a.getFieldNames();
     std::vector<std::string> fieldsB = b.getFieldNames();
 
-    // 合并所有字段名，去重
+    // 合并所有字段名，去重（预分配空间减少rehash）
     std::unordered_set<std::string> allFieldNames;
+    allFieldNames.reserve(fieldsA.size() + fieldsB.size());
     for (const auto& field : fieldsA) {
         if (field == a.getIndexKey())
         {
