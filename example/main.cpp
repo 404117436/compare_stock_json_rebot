@@ -406,6 +406,11 @@ int64_t getBatchTimestamp(const std::vector<StockDataContainer>& batch, const St
     return batch[0].getIndexValue();
 }
 
+// 覆盖式输出辅助函数
+void printProgressOverwrite(const std::string& message) {
+    std::cout << "\r" << std::string(80, ' ') << "\r" << message << std::flush;
+}
+
 // 为单条记录生成差异报告
 std::string generateSingleRecordReport(const RecordComparisonDetail& detail) {
     std::ostringstream report;
@@ -589,7 +594,7 @@ void demonstrateJsonFileComparison(const std::string& fileA, const std::string& 
 
             if (!hasMoreA) {
                 // A文件结束，B剩余数据为MISS_IN_A
-                std::cout << "批次 " << batchCounter << ": B剩余数据 " << batchB.size() << " 条（A中缺失）" << std::endl;
+                printProgressOverwrite("批次 " + std::to_string(batchCounter) + ": B剩余数据 " + std::to_string(batchB.size()) + " 条（A中缺失）");
                 processMissInA(batchB, outputDir);
                 totalMissInA += batchB.size();
                 totalProcessedB += batchB.size();
@@ -597,7 +602,7 @@ void demonstrateJsonFileComparison(const std::string& fileA, const std::string& 
 
             } else if (!hasMoreB) {
                 // B文件结束，A剩余数据为MISS_IN_B
-                std::cout << "批次 " << batchCounter << ": A剩余数据 " << batchA.size() << " 条（B中缺失）" << std::endl;
+                printProgressOverwrite("批次 " + std::to_string(batchCounter) + ": A剩余数据 " + std::to_string(batchA.size()) + " 条（B中缺失）");
                 processMissInB(batchA, outputDir);
                 totalMissInB += batchA.size();
                 totalProcessedA += batchA.size();
@@ -610,7 +615,7 @@ void demonstrateJsonFileComparison(const std::string& fileA, const std::string& 
 
                 if (timeA < timeB) {
                     // A的时间戳更早，在B中缺失
-                    std::cout << "批次 " << batchCounter << ": 时间戳 " << timeA << " (" << batchA.size() << " 条记录，B中缺失）" << std::endl;
+                    printProgressOverwrite("批次 " + std::to_string(batchCounter) + ": 时间戳 " + std::to_string(timeA) + " (" + std::to_string(batchA.size()) + " 条记录，B中缺失）");
                     processMissInB(batchA, outputDir);
                     totalMissInB += batchA.size();
                     totalProcessedA += batchA.size();
@@ -618,7 +623,7 @@ void demonstrateJsonFileComparison(const std::string& fileA, const std::string& 
 
                 } else if (timeA > timeB) {
                     // B的时间戳更早，在A中缺失
-                    std::cout << "批次 " << batchCounter << ": 时间戳 " << timeB << " (" << batchB.size() << " 条记录，A中缺失）" << std::endl;
+                    printProgressOverwrite("批次 " + std::to_string(batchCounter) + ": 时间戳 " + std::to_string(timeB) + " (" + std::to_string(batchB.size()) + " 条记录，A中缺失）");
                     processMissInA(batchB, outputDir);
                     totalMissInA += batchB.size();
                     totalProcessedB += batchB.size();
@@ -626,7 +631,7 @@ void demonstrateJsonFileComparison(const std::string& fileA, const std::string& 
 
                 } else {
                     // 时间戳相同，进行正常字段对比
-                    std::cout << "批次 " << batchCounter << ": 时间戳 " << timeA << " (A:" << batchA.size() << " 条, B:" << batchB.size() << " 条，对比中...）" << std::endl;
+                    printProgressOverwrite("批次 " + std::to_string(batchCounter) + ": 时间戳 " + std::to_string(timeA) + " (A:" + std::to_string(batchA.size()) + " 条, B:" + std::to_string(batchB.size()) + " 条，对比中...）");
                     processMatching(batchA, batchB, outputDir);
                     totalMatched += batchA.size();
                     totalProcessedA += batchA.size();
@@ -636,6 +641,9 @@ void demonstrateJsonFileComparison(const std::string& fileA, const std::string& 
                 }
             }
         }
+
+        // 覆盖式输出结束后换行，确保后续信息正常显示
+        std::cout << std::endl;
 
         std::cout << "\n--- 流式对比完成 ---" << std::endl;
         std::cout << "总共处理批次: " << batchCounter << std::endl;
@@ -687,6 +695,9 @@ void printUsage(const char* programName) {
 
 // 主函数 - 演示不同的测试场景
 int main(int argc, char* argv[]) {
+    // 记录程序开始时间
+    auto startTime = std::chrono::high_resolution_clock::now();
+
     // 参数解析
     std::string fileA;
     std::string fileB;
@@ -819,6 +830,12 @@ int main(int argc, char* argv[]) {
     }
 
     std::cout << "\n🎉 执行成功完成!" << std::endl;
+
+    // 计算并输出程序运行耗时
+    auto endTime = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(endTime - startTime);
+    double seconds = duration.count() / 1000.0;
+    std::cout << "程序运行耗时: " << std::fixed << std::setprecision(3) << seconds << "s" << std::endl;
 
     return 0;
 }
