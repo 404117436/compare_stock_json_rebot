@@ -518,8 +518,9 @@ void writeRecordToFile(const RecordComparisonDetail& detail, const std::string& 
 
 
 // 处理仅在B中存在的数据（A中缺失）
-void processMissInA(const std::vector<StockDataContainer>& batchB, const std::string& outputDir) {
+void processMissInA(const std::vector<StockDataContainer>& batchB, const std::string& outputDir, double tolerance) {
     StockDataComparator comparator;
+    comparator.setTolerance(tolerance);
     for (const auto& recordB : batchB) {
         RecordComparisonDetail detail = comparator.createMissRecord(recordB, true);
         writeRecordToFile(detail, outputDir);
@@ -527,8 +528,9 @@ void processMissInA(const std::vector<StockDataContainer>& batchB, const std::st
 }
 
 // 处理仅在A中存在的数据（B中缺失）
-void processMissInB(const std::vector<StockDataContainer>& batchA, const std::string& outputDir) {
+void processMissInB(const std::vector<StockDataContainer>& batchA, const std::string& outputDir, double tolerance) {
     StockDataComparator comparator;
+    comparator.setTolerance(tolerance);
     for (const auto& recordA : batchA) {
         RecordComparisonDetail detail = comparator.createMissRecord(recordA, false);
         writeRecordToFile(detail, outputDir);
@@ -538,9 +540,10 @@ void processMissInB(const std::vector<StockDataContainer>& batchA, const std::st
 // 处理时间戳匹配的正常对比
 void processMatching(const std::vector<StockDataContainer>& batchA,
                     const std::vector<StockDataContainer>& batchB,
-                    const std::string& outputDir) {
+                    const std::string& outputDir, double tolerance) {
     // 使用现有的 StockDataComparator 进行字段级对比
     StockDataComparator comparator;
+    comparator.setTolerance(tolerance);
     comparator.setDataA(batchA);
     comparator.setDataB(batchB);
 
@@ -553,7 +556,7 @@ void processMatching(const std::vector<StockDataContainer>& batchA,
 }
 
 // 演示JSON文件对比功能（流式处理大文件）
-void demonstrateJsonFileComparison(const std::string& fileA, const std::string& fileB, const std::string& outputDir, const std::vector<std::string>& ignoreFields = {}, int64_t indexDecimal = 1) {
+void demonstrateJsonFileComparison(const std::string& fileA, const std::string& fileB, const std::string& outputDir, const std::vector<std::string>& ignoreFields = {}, int64_t indexDecimal = 1, double tolerance = 1e-9) {
     try {
         // 创建输出目录
         if (!createOutputDirectory(outputDir)) {
@@ -591,7 +594,7 @@ void demonstrateJsonFileComparison(const std::string& fileA, const std::string& 
             if (!hasMoreA) {
                 // A文件结束，B剩余数据为MISS_IN_A
                 printProgressOverwrite("批次 " + std::to_string(batchCounter) + ": B剩余数据 " + std::to_string(batchB.size()) + " 条（A中缺失）");
-                processMissInA(batchB, outputDir);
+                processMissInA(batchB, outputDir, tolerance);
                 totalMissInA += batchB.size();
                 totalProcessedB += batchB.size();
                 hasMoreB = readerB.popBatch(batchB);
@@ -599,7 +602,7 @@ void demonstrateJsonFileComparison(const std::string& fileA, const std::string& 
             } else if (!hasMoreB) {
                 // B文件结束，A剩余数据为MISS_IN_B
                 printProgressOverwrite("批次 " + std::to_string(batchCounter) + ": A剩余数据 " + std::to_string(batchA.size()) + " 条（B中缺失）");
-                processMissInB(batchA, outputDir);
+                processMissInB(batchA, outputDir, tolerance);
                 totalMissInB += batchA.size();
                 totalProcessedA += batchA.size();
                 hasMoreA = readerA.popBatch(batchA);
@@ -612,7 +615,7 @@ void demonstrateJsonFileComparison(const std::string& fileA, const std::string& 
                 if (timeA < timeB) {
                     // A的时间戳更早，在B中缺失
                     printProgressOverwrite("批次 " + std::to_string(batchCounter) + ": 时间戳 " + std::to_string(timeA) + " (" + std::to_string(batchA.size()) + " 条记录，B中缺失）");
-                    processMissInB(batchA, outputDir);
+                    processMissInB(batchA, outputDir, tolerance);
                     totalMissInB += batchA.size();
                     totalProcessedA += batchA.size();
                     hasMoreA = readerA.popBatch(batchA);
@@ -620,7 +623,7 @@ void demonstrateJsonFileComparison(const std::string& fileA, const std::string& 
                 } else if (timeA > timeB) {
                     // B的时间戳更早，在A中缺失
                     printProgressOverwrite("批次 " + std::to_string(batchCounter) + ": 时间戳 " + std::to_string(timeB) + " (" + std::to_string(batchB.size()) + " 条记录，A中缺失）");
-                    processMissInA(batchB, outputDir);
+                    processMissInA(batchB, outputDir, tolerance);
                     totalMissInA += batchB.size();
                     totalProcessedB += batchB.size();
                     hasMoreB = readerB.popBatch(batchB);
@@ -628,7 +631,7 @@ void demonstrateJsonFileComparison(const std::string& fileA, const std::string& 
                 } else {
                     // 时间戳相同，进行正常字段对比
                     printProgressOverwrite("批次 " + std::to_string(batchCounter) + ": 时间戳 " + std::to_string(timeA) + " (A:" + std::to_string(batchA.size()) + " 条, B:" + std::to_string(batchB.size()) + " 条，对比中...）");
-                    processMatching(batchA, batchB, outputDir);
+                    processMatching(batchA, batchB, outputDir, tolerance);
                     totalMatched += batchA.size();
                     totalProcessedA += batchA.size();
                     totalProcessedB += batchB.size();
@@ -666,7 +669,7 @@ void demonstrateJsonFileComparison(const std::string& fileA, const std::string& 
 
 // 显示帮助信息
 void printUsage(const char* programName) {
-    std::cout << "用法: " << programName << " -a <文件A路径> -b <文件B路径> [-o <输出目录>] [-f <过滤字段>] [-decimal <精度值>]" << std::endl;
+    std::cout << "用法: " << programName << " -a <文件A路径> -b <文件B路径> [-o <输出目录>] [-f <过滤字段>] [-decimal <精度值>] [-t <容差值>]" << std::endl;
     std::cout << std::endl;
     std::cout << "必需参数:" << std::endl;
     std::cout << "  -a <文件路径>  指定第一个JSON文件的绝对路径" << std::endl;
@@ -676,6 +679,7 @@ void printUsage(const char* programName) {
     std::cout << "  -o <目录路径>      指定差异文件的输出目录，默认: ./diff_output/" << std::endl;
     std::cout << "  -f <字段列表>      指定需要忽略的字段，用逗号分隔（可选）" << std::endl;
     std::cout << "  -decimal <精度值>  指定时间戳索引精度，默认: 1" << std::endl;
+    std::cout << "  -t <容差值>        指定浮点数比较容差，默认: 1e-9" << std::endl;
     std::cout << "  -h, --help         显示此帮助信息" << std::endl;
     std::cout << std::endl;
     std::cout << "示例:" << std::endl;
@@ -683,6 +687,7 @@ void printUsage(const char* programName) {
     std::cout << "  " << programName << " -a data1.json -b data2.json -o /tmp/diff_result" << std::endl;
     std::cout << "  " << programName << " -a data1.json -b data2.json -f timestamp,debug_info" << std::endl;
     std::cout << "  " << programName << " -a data1.json -b data2.json -decimal 1000" << std::endl;
+    std::cout << "  " << programName << " -a data1.json -b data2.json -t 0.001" << std::endl;
     std::cout << "  " << programName << " -a data1.json -b data2.json  # 不过滤任何字段" << std::endl;
     std::cout << "  " << programName << " --help" << std::endl;
     std::cout << std::endl;
@@ -700,6 +705,7 @@ int main(int argc, char* argv[]) {
     std::string outputDir = "./diff_output";  // 默认输出目录
     std::vector<std::string> ignoreFields;    // 默认为空，表示不过滤
     int64_t indexDecimal = 1;                 // 默认索引精度为1
+    double tolerance = 1e-9;                  // 默认浮点数比较容差
 
     // 解析命令行参数
     for (int i = 1; i < argc; i++) {
@@ -771,6 +777,23 @@ int main(int argc, char* argv[]) {
                 return 1;
             }
         }
+        else if (arg == "-t") {
+            if (i + 1 >= argc) {
+                std::cerr << "❌ 参数 -t 需要指定容差值!" << std::endl;
+                printUsage(argv[0]);
+                return 1;
+            }
+            try {
+                tolerance = std::stod(argv[++i]);
+                if (tolerance <= 0.0) {
+                    std::cerr << "❌ 容差值必须为正数!" << std::endl;
+                    return 1;
+                }
+            } catch (const std::exception& e) {
+                std::cerr << "❌ 容差参数格式错误: " << argv[i] << std::endl;
+                return 1;
+            }
+        }
         else {
             std::cerr << "❌ 未知参数: " << arg << std::endl;
             printUsage(argv[0]);
@@ -807,6 +830,7 @@ int main(int argc, char* argv[]) {
         std::cout << "字段过滤: 未启用（读取所有字段）" << std::endl;
     }
     std::cout << "索引精度: " << indexDecimal << std::endl;
+    std::cout << "容差值: " << tolerance << std::endl;
     std::cout << std::string(60, '=') << std::endl;
 
     try {
@@ -817,7 +841,7 @@ int main(int argc, char* argv[]) {
 
         // 2. 执行JSON文件对比
         std::cout << "\n=== 步骤2: 执行文件对比 ===" << std::endl;
-        demonstrateJsonFileComparison(fileA, fileB, outputDir, ignoreFields, indexDecimal);
+        demonstrateJsonFileComparison(fileA, fileB, outputDir, ignoreFields, indexDecimal, tolerance);
 
     } catch (const std::exception& e) {
         std::cerr << "❌ 执行失败: " << e.what() << std::endl;

@@ -74,6 +74,7 @@ class StockDataComparator {
 private:
     std::vector<StockDataContainer> a_;         // 数据集A
     std::vector<StockDataContainer> b_;         // 数据集B
+    double tolerance_;                          // 浮点数比较容差
 
     // 内部辅助方法
     std::string generateRecordKey(const StockDataContainer& container) const;
@@ -95,7 +96,7 @@ private:
 
 public:
     // 构造函数
-    StockDataComparator() = default;
+    StockDataComparator();
 
     // 禁用拷贝构造和赋值
     StockDataComparator(const StockDataComparator&) = delete;
@@ -112,6 +113,10 @@ public:
     const std::vector<StockDataContainer>& getDataB() const { return b_; }
     size_t getSizeA() const { return a_.size(); }
     size_t getSizeB() const { return b_.size(); }
+
+    // 容差配置接口
+    void setTolerance(double tolerance);                                  // 设置浮点数比较容差
+    double getTolerance() const { return tolerance_; }                    // 获取当前容差值
 
     // 核心比较功能
     ComparisonResult compareDetailed() const;                             // 执行详细比较（包含字段差异）

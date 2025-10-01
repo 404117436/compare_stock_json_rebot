@@ -90,6 +90,17 @@ static ColumnWidths calculateColumnWidths(const std::vector<FieldDifference>& di
     return widths;
 }
 
+// 构造函数
+StockDataComparator::StockDataComparator() : tolerance_(1e-9) {
+}
+
+// 容差配置接口
+void StockDataComparator::setTolerance(double tolerance) {
+    if (tolerance > 0.0) {
+        tolerance_ = tolerance;
+    }
+}
+
 // 数据注入接口 - 拷贝版本
 void StockDataComparator::setDataA(const std::vector<StockDataContainer>& data) {
     a_ = data;
@@ -341,9 +352,8 @@ bool StockDataComparator::compareStringFields(const std::string& a, const std::s
 }
 
 bool StockDataComparator::compareDoubleFields(double a, double b) const {
-    // 对于浮点数比较，考虑精度问题
-    const double epsilon = 1e-9;
-    return std::abs(a - b) < epsilon;
+    // 对于浮点数比较，使用配置的容差值
+    return std::abs(a - b) < tolerance_;
 }
 
 // 详细字段比较方法 - 收集所有差异信息
