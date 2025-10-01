@@ -554,10 +554,6 @@ void processMatching(const std::vector<StockDataContainer>& batchA,
 
 // 演示JSON文件对比功能（流式处理大文件）
 void demonstrateJsonFileComparison(const std::string& fileA, const std::string& fileB, const std::string& outputDir, const std::vector<std::string>& ignoreFields = {}, int64_t indexDecimal = 1) {
-    std::cout << "\n" << std::string(60, '=') << std::endl;
-    std::cout << "JSON文件流式对比Demo" << std::endl;
-    std::cout << std::string(60, '=') << std::endl;
-
     try {
         // 创建输出目录
         if (!createOutputDirectory(outputDir)) {
@@ -748,6 +744,8 @@ int main(int argc, char* argv[]) {
 
             // 显示解析到的字段
             if (!ignoreFields.empty()) {
+                std::cout << std::endl;
+                std::cout << std::endl;
                 std::cout << "✓ 将过滤字段: ";
                 for (size_t j = 0; j < ignoreFields.size(); ++j) {
                     if (j > 0) std::cout << ", ";
@@ -795,9 +793,6 @@ int main(int argc, char* argv[]) {
     if (!validateFile(fileB)) {
         return 1;
     }
-
-    std::cout << "StockDataComparator & StockDataBatchReader 集成演示" << std::endl;
-    std::cout << "功能：JSON文件批量读取 + 详细差异对比 + 按Code分组输出" << std::endl;
     std::cout << "文件A: " << fileA << std::endl;
     std::cout << "文件B: " << fileB << std::endl;
     std::cout << "输出目录: " << outputDir << std::endl;

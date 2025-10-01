@@ -33,7 +33,7 @@ public:
     // 构造函数
     StockDataBatchReader(const std::string& filePath,
                         const std::string& indexKey = "time",   // 默认使用time作为索引字段
-                        size_t maxMemorySize = 1024 * 1024,
+                        size_t maxMemorySize = 1024 * 1024 * 100,
                         int64_t indexDecimal = 1,               // 默认1MB内存，精度为1
                         const std::vector<std::string>& ignoreFields = {}); // 默认不忽略任何字段
 
