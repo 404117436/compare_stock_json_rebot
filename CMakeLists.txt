@@ -22,11 +22,12 @@ if(NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE Release)
 endif()
 
+# 添加头文件目录
+set(RAPIDJSON_INCLUDE_DIR ${CMAKE_SOURCE_DIR}/third_party/rapidjson/include)
+
 # 包含目录
 include_directories(${CMAKE_SOURCE_DIR}/include)
-
-# 添加头文件目录
-set(RAPIDJSON_INCLUDE_DIR ${CMAKE_SOURCE_DIR}/include)
+include_directories(${RAPIDJSON_INCLUDE_DIR})
 
 # 查找所有源文件
 file(GLOB_RECURSE SOURCES "src/*.cpp")
