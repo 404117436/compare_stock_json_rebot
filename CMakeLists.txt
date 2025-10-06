@@ -137,15 +137,54 @@ target_compile_features(StockDataComparator PUBLIC cxx_std_11)
 # StockDataComparator库依赖StockDataContainer库
 target_link_libraries(StockDataComparator StockDataContainer)
 
+# 创建FastCodeExtractor静态库
+add_library(FastCodeExtractor STATIC
+    src/FastCodeExtractor.cpp
+    include/FastCodeExtractor.h
+)
+
+# 设置FastCodeExtractor库的包含目录
+target_include_directories(FastCodeExtractor PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+    $<INSTALL_INTERFACE:include>
+)
+
+# 设置FastCodeExtractor库的C++标准
+target_compile_features(FastCodeExtractor PUBLIC cxx_std_11)
+
+# FastCodeExtractor库依赖LineReader库
+target_link_libraries(FastCodeExtractor LineReader)
+
 # 创建JsonParser示例可执行文件
 add_executable(json_example example/main.cpp)
 
 # 链接JsonParser库到示例
 target_link_libraries(json_example JsonParser StockDataComparator StockDataBatchReader)
 
+# 创建FastCodeExtractor测试可执行文件
+add_executable(test_fast_code_extractor example/test_fast_code_extractor.cpp)
+
+# 链接FastCodeExtractor库到测试程序
+target_link_libraries(test_fast_code_extractor FastCodeExtractor)
+
+# 创建按 code 分组工具可执行文件
+add_executable(split_by_code example/split_by_code.cpp)
+
+# 链接FastCodeExtractor库到分组工具
+target_link_libraries(split_by_code FastCodeExtractor)
 
 # 为不同构建类型设置编译选项
 target_compile_options(json_example PRIVATE
+    $<$<CONFIG:Debug>:-g -O0>
+    $<$<CONFIG:Release>:-O3 -DNDEBUG>
+)
+
+target_compile_options(test_fast_code_extractor PRIVATE
+    $<$<CONFIG:Debug>:-g -O0>
+    $<$<CONFIG:Release>:-O3 -DNDEBUG>
+)
+
+target_compile_options(split_by_code PRIVATE
     $<$<CONFIG:Debug>:-g -O0>
     $<$<CONFIG:Release>:-O3 -DNDEBUG>
 )
@@ -157,7 +196,7 @@ if(CMAKE_BUILD_TYPE STREQUAL "Debug")
 endif()
 
 # 安装规则（可选）
-install(TARGETS JsonParser LineReader GenericJsonContainer StockDataContainer StockDataBatchReader StockDataComparator json_example
+install(TARGETS JsonParser LineReader GenericJsonContainer StockDataContainer StockDataBatchReader StockDataComparator FastCodeExtractor json_example test_fast_code_extractor split_by_code
     ARCHIVE DESTINATION lib
     LIBRARY DESTINATION lib
     RUNTIME DESTINATION bin
