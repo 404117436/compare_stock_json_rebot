@@ -3,8 +3,8 @@
 #include <algorithm>
 
 // 构造函数
-StockDataBatchReader::StockDataBatchReader(const std::string& filePath, const std::string& indexKey, int64_t indexDecimal, const std::vector<std::string>& ignoreFields)
-    : filePath_(filePath), maxMemorySize_(MEM_SIZE), container_decimal_(indexDecimal), indexKey_(indexKey), ignore_fields_(ignoreFields), hasPendingData_(false) {
+StockDataBatchReader::StockDataBatchReader(const std::string& filePath, const std::string& indexKey, int64_t indexDecimal, const std::vector<std::string>& ignoreFields, const std::string& compareKey)
+    : filePath_(filePath), maxMemorySize_(MEM_SIZE), container_decimal_(indexDecimal), indexKey_(indexKey), compareKey_(compareKey), ignore_fields_(ignoreFields), hasPendingData_(false) {
 
     // 预计算忽略字段缓存（性能优化）
     rebuildIgnoreCache();
@@ -85,6 +85,11 @@ bool StockDataBatchReader::readSingleRecord(StockDataContainer& container) {
 
         // 创建新容器并设置索引字段
         container = StockDataContainer("BatchData", indexKey_, container_decimal_);
+
+        // 设置比较键（如果有）
+        if (!compareKey_.empty()) {
+            container.setCompareKey(compareKey_);
+        }
 
         // 解析JSON（使用预计算的缓存字符串，避免每次重建）
         bool parseSuccess = false;

@@ -22,6 +22,7 @@ private:
     size_t maxMemorySize_;                           // 内存软上限（字节）
     int64_t container_decimal_;                      // 创建容器时使用的精度参数
     std::string indexKey_;                           // 索引字段名称
+    std::string compareKey_;                         // 比较键字段名称（可选）
     std::vector<std::string> ignore_fields_;         // 需要忽略的字段列表
 
     // 忽略字段缓存（性能优化：避免每次记录都重建）
@@ -42,7 +43,8 @@ public:
     StockDataBatchReader(const std::string& filePath,
                         const std::string& indexKey = "time",   // 默认使用time作为索引字段
                         int64_t indexDecimal = 1,               // 默认精度为1
-                        const std::vector<std::string>& ignoreFields = {}); // 默认不忽略任何字段
+                        const std::vector<std::string>& ignoreFields = {}, // 默认不忽略任何字段
+                        const std::string& compareKey = "");    // 默认不使用比较键
 
     // 禁用拷贝
     StockDataBatchReader(const StockDataBatchReader&) = delete;
@@ -65,6 +67,10 @@ public:
     // 索引字段控制
     const std::string& getIndexKey() const { return indexKey_; }          // 获取索引字段名
     void setIndexKey(const std::string& indexKey) { indexKey_ = indexKey; } // 设置索引字段名
+
+    // 比较键控制
+    const std::string& getCompareKey() const { return compareKey_; }      // 获取比较键字段名
+    void setCompareKey(const std::string& compareKey) { compareKey_ = compareKey; } // 设置比较键字段名
 
     // 字段过滤控制
     void setIgnoreFields(const std::vector<std::string>& fields);          // 设置忽略字段列表

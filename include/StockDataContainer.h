@@ -19,6 +19,8 @@ private:
     std::string index_key_;    // 用户指定的索引字段名
     int64_t index_value_;      // 索引字段对应的值（数值类型）
     int64_t index_decimal_;    // 索引精度控制，默认值为1
+    std::string compare_key_;  // 比较键字段名（默认空，不启用）
+    int64_t compare_value_;    // 比较键值（精确值，无精度转换）
     std::string raw_json_;     // 原始JSON字符串
 
     // 从解析后的数据中自动提取关键字段
@@ -30,6 +32,7 @@ public:
     explicit StockDataContainer(const std::string& source);                 // 默认索引字段为"time"
     StockDataContainer(const std::string& source, const std::string& index_key); // 指定索引字段
     StockDataContainer(const std::string& source, const std::string& index_key, int64_t index_decimal); // 指定索引字段和精度
+    StockDataContainer(const std::string& source, const std::string& index_key, int64_t index_decimal, const std::string& compare_key); // 指定索引字段、精度和比较键
 
     // 重写JSON解析方法，自动提取关键字段
     bool parseFromJsonString(const std::string& jsonStr) override;
@@ -43,6 +46,12 @@ public:
     int64_t getIndexDecimal() const { return index_decimal_; }            // 获取索引精度
     void setIndexDecimal(int64_t decimal);                                // 设置索引精度
     int64_t convertIndexToComparableValue(const std::string& indexValue) const;   // 索引值转换方法
+
+    // 比较键配置
+    void setCompareKey(const std::string& key);                            // 设置比较键字段名
+    const std::string& getCompareKey() const { return compare_key_; }      // 获取当前比较键字段名
+    int64_t getCompareValue() const { return compare_value_; }             // 获取比较键值
+    bool hasCompareKey() const { return !compare_key_.empty(); }           // 是否启用比较键
 
     // 核心访问接口
     const std::string& getCode() const { return code_; }                   // 获取股票代码

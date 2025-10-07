@@ -13,8 +13,12 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <chrono>
+#include <dirent.h>
+#include <unistd.h>
+#include <set>
 #include "StockDataComparator.h"
 #include "StockDataBatchReader.h"
+#include "FastCodeExtractor.h"
 
 /**
  * JSON文件差异对比Demo
@@ -555,8 +559,316 @@ void processMatching(const std::vector<StockDataContainer>& batchA,
     }
 }
 
+// ============================================================
+// 前向声明
+// ============================================================
+void demonstrateJsonFileComparison(
+    const std::string& fileA,
+    const std::string& fileB,
+    const std::string& outputDir,
+    const std::vector<std::string>& ignoreFields,
+    int64_t indexDecimal,
+    double tolerance,
+    const std::string& compareKey = "");
+
+// ============================================================
+// 分组模式相关辅助函数
+// ============================================================
+
+// 生成唯一时间戳字符串
+std::string generateTimestamp() {
+    auto now = std::chrono::system_clock::now();
+    auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()).count();
+    return std::to_string(ms);
+}
+
+// 检查文件是否存在
+bool fileExists(const std::string& path) {
+    struct stat buffer;
+    return (stat(path.c_str(), &buffer) == 0);
+}
+
+// 从目录中获取所有code列表
+std::vector<std::string> getCodeListFromDirectory(const std::string& dir) {
+    std::vector<std::string> codes;
+
+    DIR* dp = opendir(dir.c_str());
+    if (!dp) {
+        std::cerr << "❌ 无法打开目录: " << dir << std::endl;
+        return codes;
+    }
+
+    struct dirent* entry;
+    while ((entry = readdir(dp)) != nullptr) {
+        std::string filename = entry->d_name;
+
+        // 跳过 . 和 ..
+        if (filename == "." || filename == "..") {
+            continue;
+        }
+
+        // 检查是否是 .txt 文件
+        if (filename.size() > 4 && filename.substr(filename.size() - 4) == ".txt") {
+            // 提取 code（去掉 .txt 后缀）
+            std::string code = filename.substr(0, filename.size() - 4);
+            codes.push_back(code);
+        }
+    }
+
+    closedir(dp);
+    return codes;
+}
+
+// 合并两个code列表并去重
+std::vector<std::string> mergeCodes(const std::vector<std::string>& codesA,
+                                    const std::vector<std::string>& codesB) {
+    std::set<std::string> uniqueCodes;
+
+    for (const auto& code : codesA) {
+        uniqueCodes.insert(code);
+    }
+    for (const auto& code : codesB) {
+        uniqueCodes.insert(code);
+    }
+
+    return std::vector<std::string>(uniqueCodes.begin(), uniqueCodes.end());
+}
+
+// 递归删除目录
+void removeDirectory(const std::string& dir) {
+    DIR* dp = opendir(dir.c_str());
+    if (!dp) {
+        return;
+    }
+
+    struct dirent* entry;
+    while ((entry = readdir(dp)) != nullptr) {
+        std::string filename = entry->d_name;
+
+        if (filename == "." || filename == "..") {
+            continue;
+        }
+
+        std::string fullPath = dir + "/" + filename;
+
+        struct stat st;
+        if (stat(fullPath.c_str(), &st) == 0) {
+            if (S_ISDIR(st.st_mode)) {
+                removeDirectory(fullPath);  // 递归删除子目录
+            } else {
+                unlink(fullPath.c_str());   // 删除文件
+            }
+        }
+    }
+
+    closedir(dp);
+    rmdir(dir.c_str());  // 删除空目录
+}
+
+// 使用FastCodeExtractor分组文件
+void splitInputFilesByCode(const std::string& fileA,
+                          const std::string& fileB,
+                          const std::string& splitDirA,
+                          const std::string& splitDirB) {
+    std::cout << "\n--- 按 code 分组输入文件 ---" << std::endl;
+
+    // 分组文件A
+    std::cout << "分组文件A: " << fileA << " → " << splitDirA << std::endl;
+    auto statsA = FastCodeExtractor::splitByCode(fileA, splitDirA);
+    std::cout << "  ✓ 文件A分组完成: " << statsA.uniqueCodes << " 个 code, "
+              << statsA.successLines << " 条记录" << std::endl;
+
+    // 分组文件B
+    std::cout << "分组文件B: " << fileB << " → " << splitDirB << std::endl;
+    auto statsB = FastCodeExtractor::splitByCode(fileB, splitDirB);
+    std::cout << "  ✓ 文件B分组完成: " << statsB.uniqueCodes << " 个 code, "
+              << statsB.successLines << " 条记录" << std::endl;
+}
+
+// 处理仅在B中存在的code（全部记录为MISS_IN_A）
+void processCodeMissInA(const std::string& codeFileB,
+                        const std::string& outputFile,
+                        double tolerance,
+                        const std::string& compareKey) {
+    // 使用现有的流式处理逻辑，但所有记录都标记为MISS_IN_A
+    try {
+        StockDataBatchReader readerB(codeFileB, "time", 1, {}, compareKey);
+        StockDataComparator comparator;
+        comparator.setTolerance(tolerance);
+
+        std::vector<StockDataContainer> batchB;
+
+        while (readerB.popBatch(batchB)) {
+            for (const auto& recordB : batchB) {
+                RecordComparisonDetail detail = comparator.createMissRecord(recordB, true);
+                writeRecordToFile(detail, outputFile);
+            }
+        }
+    } catch (const std::exception& e) {
+        std::cerr << "处理 MISS_IN_A 时出错: " << e.what() << std::endl;
+    }
+}
+
+// 处理仅在A中存在的code（全部记录为MISS_IN_B）
+void processCodeMissInB(const std::string& codeFileA,
+                        const std::string& outputFile,
+                        double tolerance,
+                        const std::string& compareKey) {
+    // 使用现有的流式处理逻辑，但所有记录都标记为MISS_IN_B
+    try {
+        StockDataBatchReader readerA(codeFileA, "time", 1, {}, compareKey);
+        StockDataComparator comparator;
+        comparator.setTolerance(tolerance);
+
+        std::vector<StockDataContainer> batchA;
+
+        while (readerA.popBatch(batchA)) {
+            for (const auto& recordA : batchA) {
+                RecordComparisonDetail detail = comparator.createMissRecord(recordA, false);
+                writeRecordToFile(detail, outputFile);
+            }
+        }
+    } catch (const std::exception& e) {
+        std::cerr << "处理 MISS_IN_B 时出错: " << e.what() << std::endl;
+    }
+}
+
+// 比较单个code的两个文件
+void compareCodeFiles(const std::string& codeFileA,
+                     const std::string& codeFileB,
+                     const std::string& outputFile,
+                     const std::string& outputDir,
+                     const std::vector<std::string>& ignoreFields,
+                     int64_t indexDecimal,
+                     double tolerance,
+                     const std::string& compareKey) {
+    bool hasA = fileExists(codeFileA);
+    bool hasB = fileExists(codeFileB);
+
+    if (!hasA && !hasB) {
+        // 两个文件都不存在，跳过
+        return;
+    }
+
+    if (!hasA && hasB) {
+        // 只有B存在，全部标记为MISS_IN_A
+        processCodeMissInA(codeFileB, outputFile, tolerance, compareKey);
+    } else if (hasA && !hasB) {
+        // 只有A存在，全部标记为MISS_IN_B
+        processCodeMissInB(codeFileA, outputFile, tolerance, compareKey);
+    } else {
+        // 两个文件都存在，使用现有的流式比较逻辑
+        demonstrateJsonFileComparison(codeFileA, codeFileB, outputDir, ignoreFields, indexDecimal, tolerance, compareKey);
+    }
+}
+
+// 分组模式的主比较函数
+void demonstrateGroupedComparison(const std::string& fileA,
+                                 const std::string& fileB,
+                                 const std::string& outputDir,
+                                 const std::vector<std::string>& ignoreFields,
+                                 int64_t indexDecimal,
+                                 double tolerance,
+                                 bool keepSplitFiles,
+                                 const std::string& compareKey) {
+    try {
+        // 创建输出目录
+        if (!createOutputDirectory(outputDir)) {
+            std::cerr << "❌ 无法创建输出目录: " << outputDir << std::endl;
+            return;
+        }
+
+        // 1. 创建临时目录
+        std::string timestamp = generateTimestamp();
+        std::string splitDirA = "/tmp/.json_compare_" + timestamp + "_a";
+        std::string splitDirB = "/tmp/.json_compare_" + timestamp + "_b";
+
+        std::cout << "临时目录A: " << splitDirA << std::endl;
+        std::cout << "临时目录B: " << splitDirB << std::endl;
+
+        // 2. 分组文件
+        splitInputFilesByCode(fileA, fileB, splitDirA, splitDirB);
+
+        // 3. 获取所有唯一code
+        std::cout << "\n--- 获取code列表 ---" << std::endl;
+        auto codesA = getCodeListFromDirectory(splitDirA);
+        auto codesB = getCodeListFromDirectory(splitDirB);
+        auto allCodes = mergeCodes(codesA, codesB);
+
+        std::cout << "文件A中的code数: " << codesA.size() << std::endl;
+        std::cout << "文件B中的code数: " << codesB.size() << std::endl;
+        std::cout << "总共唯一code数: " << allCodes.size() << std::endl;
+
+        // 4. 逐个code比较
+        std::cout << "\n--- 开始逐个code比较 ---" << std::endl;
+
+        int processedCodes = 0;
+        int totalOnlyInA = 0;
+        int totalOnlyInB = 0;
+        int totalBoth = 0;
+
+        for (const auto& code : allCodes) {
+            processedCodes++;
+
+            std::string codeFileA = splitDirA + "/" + code + ".txt";
+            std::string codeFileB = splitDirB + "/" + code + ".txt";
+            std::string codeOutput = outputDir + "/" + code + ".txt";
+
+            bool hasA = fileExists(codeFileA);
+            bool hasB = fileExists(codeFileB);
+
+            std::cout << "\r处理中: [" << processedCodes << "/" << allCodes.size() << "] code=" << code;
+
+            if (hasA && hasB) {
+                totalBoth++;
+            } else if (hasA) {
+                totalOnlyInA++;
+            } else if (hasB) {
+                totalOnlyInB++;
+            }
+
+            std::cout << std::flush;
+
+            // 比较当前code的文件
+            compareCodeFiles(codeFileA, codeFileB, codeOutput, outputDir, ignoreFields, indexDecimal, tolerance, compareKey);
+        }
+
+        std::cout << std::endl;  // 换行
+
+        // 5. 显示统计信息
+        std::cout << "\n--- 分组比较完成 ---" << std::endl;
+        std::cout << "总共处理code数: " << allCodes.size() << std::endl;
+        std::cout << "两侧都存在: " << totalBoth << " 个code" << std::endl;
+        std::cout << "仅在A中存在: " << totalOnlyInA << " 个code" << std::endl;
+        std::cout << "仅在B中存在: " << totalOnlyInB << " 个code" << std::endl;
+        std::cout << "✓ 差异结果已写入目录: " << outputDir << std::endl;
+
+        // 6. 清理临时文件
+        if (!keepSplitFiles) {
+            std::cout << "\n--- 清理临时文件 ---" << std::endl;
+            std::cout << "删除临时目录: " << splitDirA << std::endl;
+            removeDirectory(splitDirA);
+            std::cout << "删除临时目录: " << splitDirB << std::endl;
+            removeDirectory(splitDirB);
+        } else {
+            std::cout << "\n--- 保留临时文件 ---" << std::endl;
+            std::cout << "临时文件保留在: " << splitDirA << std::endl;
+            std::cout << "临时文件保留在: " << splitDirB << std::endl;
+        }
+
+        std::cout << "\n✅ 分组模式JSON文件对比完成!" << std::endl;
+
+    } catch (const std::exception& e) {
+        std::cerr << "❌ 分组对比过程中发生错误: " << e.what() << std::endl;
+    }
+}
+
+// ============================================================
+// 原有流式模式函数
+// ============================================================
+
 // 演示JSON文件对比功能（流式处理大文件）
-void demonstrateJsonFileComparison(const std::string& fileA, const std::string& fileB, const std::string& outputDir, const std::vector<std::string>& ignoreFields = {}, int64_t indexDecimal = 1, double tolerance = 1e-9) {
+void demonstrateJsonFileComparison(const std::string& fileA, const std::string& fileB, const std::string& outputDir, const std::vector<std::string>& ignoreFields, int64_t indexDecimal, double tolerance, const std::string& compareKey) {
     try {
         // 创建输出目录
         if (!createOutputDirectory(outputDir)) {
@@ -567,8 +879,8 @@ void demonstrateJsonFileComparison(const std::string& fileA, const std::string& 
         std::cout << "\n--- 初始化流式读取器 ---" << std::endl;
 
         // 创建两个流式读取器
-        StockDataBatchReader readerA(fileA, "time", indexDecimal, ignoreFields);
-        StockDataBatchReader readerB(fileB, "time", indexDecimal, ignoreFields);
+        StockDataBatchReader readerA(fileA, "time", indexDecimal, ignoreFields, compareKey);
+        StockDataBatchReader readerB(fileB, "time", indexDecimal, ignoreFields, compareKey);
 
         std::cout << "✓ 文件A读取器已创建: " << fileA << std::endl;
         std::cout << "✓ 文件B读取器已创建: " << fileB << std::endl;
@@ -669,7 +981,7 @@ void demonstrateJsonFileComparison(const std::string& fileA, const std::string& 
 
 // 显示帮助信息
 void printUsage(const char* programName) {
-    std::cout << "用法: " << programName << " -a <文件A路径> -b <文件B路径> [-o <输出目录>] [-f <过滤字段>] [-decimal <精度值>] [-t <容差值>]" << std::endl;
+    std::cout << "用法: " << programName << " -a <文件A路径> -b <文件B路径> [选项]" << std::endl;
     std::cout << std::endl;
     std::cout << "必需参数:" << std::endl;
     std::cout << "  -a <文件路径>  指定第一个JSON文件的绝对路径" << std::endl;
@@ -680,15 +992,27 @@ void printUsage(const char* programName) {
     std::cout << "  -f <字段列表>      指定需要忽略的字段，用逗号分隔（可选）" << std::endl;
     std::cout << "  -decimal <精度值>  指定时间戳索引精度，默认: 1" << std::endl;
     std::cout << "  -t <容差值>        指定浮点数比较容差，默认: 1e-9" << std::endl;
+    std::cout << "  -index <字段名>    指定额外的比较键字段（用于精确匹配）" << std::endl;
+    std::cout << "  -split             启用分组模式（先按code分组，再比较）" << std::endl;
+    std::cout << "  --keep-split       保留临时分组文件（用于调试）" << std::endl;
     std::cout << "  -h, --help         显示此帮助信息" << std::endl;
+    std::cout << std::endl;
+    std::cout << "对比模式:" << std::endl;
+    std::cout << "  流式模式（默认）  按时间戳顺序流式对比，速度快，内存低" << std::endl;
+    std::cout << "  分组模式（-split）先将文件按code完全分组，再逐个code对比" << std::endl;
+    std::cout << "                     - 优势：code数据完全隔离，易于调试" << std::endl;
+    std::cout << "                     - 劣势：需要额外I/O和磁盘空间" << std::endl;
     std::cout << std::endl;
     std::cout << "示例:" << std::endl;
     std::cout << "  " << programName << " -a /path/to/fileA.json -b /path/to/fileB.json" << std::endl;
     std::cout << "  " << programName << " -a data1.json -b data2.json -o /tmp/diff_result" << std::endl;
     std::cout << "  " << programName << " -a data1.json -b data2.json -f timestamp,debug_info" << std::endl;
+    std::cout << "  " << programName << " -a data1.json -b data2.json -index order_id" << std::endl;
+    std::cout << "  " << programName << " -a data1.json -b data2.json -index level -decimal 1000" << std::endl;
+    std::cout << "  " << programName << " -a data1.json -b data2.json -split  # 分组模式" << std::endl;
+    std::cout << "  " << programName << " -a data1.json -b data2.json -split --keep-split" << std::endl;
     std::cout << "  " << programName << " -a data1.json -b data2.json -decimal 1000" << std::endl;
     std::cout << "  " << programName << " -a data1.json -b data2.json -t 0.001" << std::endl;
-    std::cout << "  " << programName << " -a data1.json -b data2.json  # 不过滤任何字段" << std::endl;
     std::cout << "  " << programName << " --help" << std::endl;
     std::cout << std::endl;
     std::cout << "功能: JSON文件批量读取 + 详细差异对比 + 按股票代码分组输出" << std::endl;
@@ -706,6 +1030,9 @@ int main(int argc, char* argv[]) {
     std::vector<std::string> ignoreFields;    // 默认为空，表示不过滤
     int64_t indexDecimal = 1;                 // 默认索引精度为1
     double tolerance = 1e-9;                  // 默认浮点数比较容差
+    std::string compareKey;                   // 比较键字段名（默认为空）
+    bool enableSplit = false;                 // 是否启用分组模式
+    bool keepSplitFiles = false;              // 是否保留分组文件
 
     // 解析命令行参数
     for (int i = 1; i < argc; i++) {
@@ -794,6 +1121,20 @@ int main(int argc, char* argv[]) {
                 return 1;
             }
         }
+        else if (arg == "-index") {
+            if (i + 1 >= argc) {
+                std::cerr << "❌ 参数 -index 需要指定字段名!" << std::endl;
+                printUsage(argv[0]);
+                return 1;
+            }
+            compareKey = argv[++i];
+        }
+        else if (arg == "-split" || arg == "--group-by-code") {
+            enableSplit = true;
+        }
+        else if (arg == "--keep-split") {
+            keepSplitFiles = true;
+        }
         else {
             std::cerr << "❌ 未知参数: " << arg << std::endl;
             printUsage(argv[0]);
@@ -831,6 +1172,11 @@ int main(int argc, char* argv[]) {
     }
     std::cout << "索引精度: " << indexDecimal << std::endl;
     std::cout << "容差值: " << tolerance << std::endl;
+    if (!compareKey.empty()) {
+        std::cout << "比较键字段: " << compareKey << std::endl;
+    } else {
+        std::cout << "比较键字段: 未设置（仅使用 code + time）" << std::endl;
+    }
     std::cout << std::string(60, '=') << std::endl;
 
     try {
@@ -841,7 +1187,16 @@ int main(int argc, char* argv[]) {
 
         // 2. 执行JSON文件对比
         std::cout << "\n=== 步骤2: 执行文件对比 ===" << std::endl;
-        demonstrateJsonFileComparison(fileA, fileB, outputDir, ignoreFields, indexDecimal, tolerance);
+
+        if (enableSplit) {
+            // 分组模式
+            std::cout << ">>> 使用分组模式（先按code分组，再比较）<<<" << std::endl;
+            demonstrateGroupedComparison(fileA, fileB, outputDir, ignoreFields, indexDecimal, tolerance, keepSplitFiles, compareKey);
+        } else {
+            // 流式模式（默认）
+            std::cout << ">>> 使用流式模式（按时间戳流式对比）<<<" << std::endl;
+            demonstrateJsonFileComparison(fileA, fileB, outputDir, ignoreFields, indexDecimal, tolerance, compareKey);
+        }
 
     } catch (const std::exception& e) {
         std::cerr << "❌ 执行失败: " << e.what() << std::endl;

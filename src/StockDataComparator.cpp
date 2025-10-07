@@ -121,8 +121,15 @@ void StockDataComparator::setDataB(std::vector<StockDataContainer>&& data) {
 
 // 生成记录的唯一键
 std::string StockDataComparator::generateRecordKey(const StockDataContainer& container) const {
-    // 简化版：使用code + "_" + indexValue作为分组标识
-    return container.getCode() + "_" + std::to_string(container.getIndexValue());
+    // 使用 code + "_" + indexValue 作为基础键
+    std::string key = container.getCode() + "_" + std::to_string(container.getIndexValue());
+
+    // 如果有比较键，追加到记录键中
+    if (container.hasCompareKey()) {
+        key += "_" + std::to_string(container.getCompareValue());
+    }
+
+    return key;
 }
 
 
@@ -265,7 +272,20 @@ bool StockDataComparator::compareRecordFields(const StockDataContainer& a, const
     if (a.getIndexKey() != b.getIndexKey()) return false;
     if (a.getIndexValue() != b.getIndexValue()) return false;
 
-    // 2. 动态获取所有字段名进行比较
+    // 2. 比较键检查（新增）
+    if (a.hasCompareKey() || b.hasCompareKey()) {
+        // 比较键必须一致
+        if (a.getCompareKey() != b.getCompareKey()) return false;
+        // 如果都有比较键，比较值
+        if (a.hasCompareKey() && b.hasCompareKey()) {
+            if (a.getCompareValue() != b.getCompareValue()) return false;
+        } else {
+            // 一个有一个没有，视为不相等
+            return false;
+        }
+    }
+
+    // 3. 动态获取所有字段名进行比较
     std::vector<std::string> fieldsA = a.getFieldNames();
     std::vector<std::string> fieldsB = b.getFieldNames();
 
@@ -366,6 +386,30 @@ RecordComparisonDetail StockDataComparator::compareRecordFieldsDetailed(const St
         // 基础字段不匹配，直接返回不相同
         detail.identical = false;
         return detail;
+    }
+
+    // 比较键检查（新增）
+    if (a.hasCompareKey() || b.hasCompareKey()) {
+        if (a.getCompareKey() != b.getCompareKey() ||
+            (a.hasCompareKey() && b.hasCompareKey() &&
+             a.getCompareValue() != b.getCompareValue())) {
+            detail.identical = false;
+            // 添加差异详情
+            FieldDifference diff;
+            diff.fieldName = "COMPARE_KEY";
+            diff.differenceType = "compare_key_mismatch";
+            diff.description = "比较键不匹配";
+            diff.existsInA = a.hasCompareKey();
+            diff.existsInB = b.hasCompareKey();
+            if (a.hasCompareKey()) {
+                diff.valueA = CustomValue(a.getCompareValue());
+            }
+            if (b.hasCompareKey()) {
+                diff.valueB = CustomValue(b.getCompareValue());
+            }
+            detail.differences.push_back(diff);
+            return detail;
+        }
     }
 
     // 2. 动态获取所有字段名进行比较

@@ -4,19 +4,23 @@
 
 // 构造函数
 StockDataContainer::StockDataContainer()
-    : GenericJsonContainer("StockData"), code_(""), index_key_("time"), index_value_(0), index_decimal_(1) {
+    : GenericJsonContainer("StockData"), code_(""), index_key_("time"), index_value_(0), index_decimal_(1), compare_key_(""), compare_value_(0) {
 }
 
 StockDataContainer::StockDataContainer(const std::string& source)
-    : GenericJsonContainer(source), code_(""), index_key_("time"), index_value_(0), index_decimal_(1) {
+    : GenericJsonContainer(source), code_(""), index_key_("time"), index_value_(0), index_decimal_(1), compare_key_(""), compare_value_(0) {
 }
 
 StockDataContainer::StockDataContainer(const std::string& source, const std::string& index_key)
-    : GenericJsonContainer(source), code_(""), index_key_(index_key), index_value_(0), index_decimal_(1) {
+    : GenericJsonContainer(source), code_(""), index_key_(index_key), index_value_(0), index_decimal_(1), compare_key_(""), compare_value_(0) {
 }
 
 StockDataContainer::StockDataContainer(const std::string& source, const std::string& index_key, int64_t index_decimal)
-    : GenericJsonContainer(source), code_(""), index_key_(index_key), index_value_(0), index_decimal_(index_decimal) {
+    : GenericJsonContainer(source), code_(""), index_key_(index_key), index_value_(0), index_decimal_(index_decimal), compare_key_(""), compare_value_(0) {
+}
+
+StockDataContainer::StockDataContainer(const std::string& source, const std::string& index_key, int64_t index_decimal, const std::string& compare_key)
+    : GenericJsonContainer(source), code_(""), index_key_(index_key), index_value_(0), index_decimal_(index_decimal), compare_key_(compare_key), compare_value_(0) {
 }
 
 // 重写JSON解析方法，自动提取关键字段
@@ -82,6 +86,30 @@ void StockDataContainer::extractKeyFields() {
     } catch (...) {
         index_value_ = 0;  // 提取失败则置为0
     }
+
+    // 提取比较键（可选，动态配置）
+    try {
+        if (!compare_key_.empty() && hasKey(compare_key_)) {
+            const auto& compareValue = getValue(compare_key_);
+
+            // 直接提取原始值，不做精度除法
+            if (compareValue.isInt()) {
+                compare_value_ = compareValue.asInt();
+            } else if (compareValue.isString()) {
+                // 字符串尝试转整数
+                compare_value_ = std::stoll(compareValue.asString());
+            } else if (compareValue.isDouble()) {
+                // 浮点数直接截断
+                compare_value_ = static_cast<int64_t>(compareValue.asDouble());
+            } else {
+                compare_value_ = 0;
+            }
+        } else {
+            compare_value_ = 0;  // 字段不存在或未设置，置为0
+        }
+    } catch (...) {
+        compare_value_ = 0;  // 提取失败则置为0
+    }
 }
 
 // 索引字段配置
@@ -101,6 +129,15 @@ void StockDataContainer::setIndexDecimal(int64_t decimal) {
         if (!empty()) {
             extractKeyFields();
         }
+    }
+}
+
+// 比较键配置
+void StockDataContainer::setCompareKey(const std::string& key) {
+    compare_key_ = key;
+    // 如果已经有数据，重新提取比较键
+    if (!empty()) {
+        extractKeyFields();
     }
 }
 
