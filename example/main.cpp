@@ -757,9 +757,35 @@ void compareCodeFiles(const std::string& codeFileA,
         // 只有A存在，全部标记为MISS_IN_B
         processCodeMissInB(codeFileA, outputFile, tolerance, compareKey);
     } else {
-        // 两个文件都存在，使用现有的流式比较逻辑
-        demonstrateJsonFileComparison(codeFileA, codeFileB, outputDir, ignoreFields, indexDecimal, tolerance, compareKey);
+        // 两个文件都存在，使用全量加载模式（分组后文件通常很小）
+        try {
+            // 1. 全量加载两个文件
+            auto dataA = FullFileLoader::loadAllRecords(
+                codeFileA, "time", indexDecimal, ignoreFields, compareKey,
+                500  // 单个code文件限制500MB
+            );
+            auto dataB = FullFileLoader::loadAllRecords(
+                codeFileB, "time", indexDecimal, ignoreFields, compareKey,
+                500
+            );
+
+            // 2. 创建比较器
+            StockDataComparator comparator;
+            comparator.setTolerance(tolerance);
+            comparator.setDataA(std::move(dataA));
+            comparator.setDataB(std::move(dataB));
+
+            // 3. 执行详细比较
             auto result = comparator.compareDetailed();
+
+            // 4. 流式写入差异记录
+            for (const auto& detail : result.detailedDifferences) {
+                writeRecordToFile(detail, outputDir);
+            }
+
+        } catch (const std::exception& e) {
+            std::cerr << "❌ 比较code文件失败: " << e.what() << std::endl;
+        }
     }
 }
 
