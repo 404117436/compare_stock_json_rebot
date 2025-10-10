@@ -159,7 +159,7 @@ target_link_libraries(FastCodeExtractor LineReader)
 add_executable(json_example example/main.cpp)
 
 # 链接JsonParser库到示例
-target_link_libraries(json_example JsonParser StockDataComparator StockDataBatchReader)
+target_link_libraries(json_example JsonParser StockDataComparator StockDataBatchReader FastCodeExtractor)
 
 # 创建FastCodeExtractor测试可执行文件
 add_executable(test_fast_code_extractor example/test_fast_code_extractor.cpp)
