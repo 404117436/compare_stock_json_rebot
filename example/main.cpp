@@ -19,6 +19,7 @@
 #include "StockDataComparator.h"
 #include "StockDataBatchReader.h"
 #include "FastCodeExtractor.h"
+#include "FullFileLoader.h"
 
 /**
  * JSON文件差异对比Demo
@@ -690,19 +691,20 @@ void processCodeMissInA(const std::string& codeFileB,
                         const std::string& outputFile,
                         double tolerance,
                         const std::string& compareKey) {
-    // 使用现有的流式处理逻辑，但所有记录都标记为MISS_IN_A
+    // 使用全量加载，所有记录都标记为MISS_IN_A
     try {
-        StockDataBatchReader readerB(codeFileB, "time", 1, {}, compareKey);
+        // 全量加载B文件
+        auto dataB = FullFileLoader::loadAllRecords(
+            codeFileB, "time", 1, {}, compareKey, 500
+        );
+
         StockDataComparator comparator;
         comparator.setTolerance(tolerance);
 
-        std::vector<StockDataContainer> batchB;
-
-        while (readerB.popBatch(batchB)) {
-            for (const auto& recordB : batchB) {
-                RecordComparisonDetail detail = comparator.createMissRecord(recordB, true);
-                writeRecordToFile(detail, outputFile);
-            }
+        // 批量生成 MISS 记录
+        for (const auto& recordB : dataB) {
+            RecordComparisonDetail detail = comparator.createMissRecord(recordB, true);
+            writeRecordToFile(detail, outputFile);
         }
     } catch (const std::exception& e) {
         std::cerr << "处理 MISS_IN_A 时出错: " << e.what() << std::endl;
@@ -714,19 +716,20 @@ void processCodeMissInB(const std::string& codeFileA,
                         const std::string& outputFile,
                         double tolerance,
                         const std::string& compareKey) {
-    // 使用现有的流式处理逻辑，但所有记录都标记为MISS_IN_B
+    // 使用全量加载，所有记录都标记为MISS_IN_B
     try {
-        StockDataBatchReader readerA(codeFileA, "time", 1, {}, compareKey);
+        // 全量加载A文件
+        auto dataA = FullFileLoader::loadAllRecords(
+            codeFileA, "time", 1, {}, compareKey, 500
+        );
+
         StockDataComparator comparator;
         comparator.setTolerance(tolerance);
 
-        std::vector<StockDataContainer> batchA;
-
-        while (readerA.popBatch(batchA)) {
-            for (const auto& recordA : batchA) {
-                RecordComparisonDetail detail = comparator.createMissRecord(recordA, false);
-                writeRecordToFile(detail, outputFile);
-            }
+        // 批量生成 MISS 记录
+        for (const auto& recordA : dataA) {
+            RecordComparisonDetail detail = comparator.createMissRecord(recordA, false);
+            writeRecordToFile(detail, outputFile);
         }
     } catch (const std::exception& e) {
         std::cerr << "处理 MISS_IN_B 时出错: " << e.what() << std::endl;
@@ -891,6 +894,64 @@ void demonstrateGroupedComparison(const std::string& fileA,
 }
 
 // ============================================================
+// 全量加载模式函数
+// ============================================================
+
+// 演示全量加载模式（一次性加载整个文件）
+void demonstrateFullLoadComparison(const std::string& fileA,
+                                   const std::string& fileB,
+                                   const std::string& outputDir,
+                                   const std::vector<std::string>& ignoreFields,
+                                   int64_t indexDecimal,
+                                   double tolerance,
+                                   const std::string& compareKey) {
+    try {
+        std::cout << "\n=== 全量加载模式 ===" << std::endl;
+
+        // 创建输出目录
+        if (!createOutputDirectory(outputDir)) {
+            std::cerr << "❌ 无法创建输出目录: " << outputDir << std::endl;
+            return;
+        }
+
+        // 1. 全量加载文件A
+        std::cout << "\n--- 加载文件A ---" << std::endl;
+        auto dataA = FullFileLoader::loadAllRecords(
+            fileA, "time", indexDecimal, ignoreFields, compareKey, 1024
+        );
+        std::cout << "✓ 文件A加载完成: " << dataA.size() << " 条记录" << std::endl;
+
+        // 2. 全量加载文件B
+        std::cout << "\n--- 加载文件B ---" << std::endl;
+        auto dataB = FullFileLoader::loadAllRecords(
+            fileB, "time", indexDecimal, ignoreFields, compareKey, 1024
+        );
+        std::cout << "✓ 文件B加载完成: " << dataB.size() << " 条记录" << std::endl;
+
+        // 3. 创建比较器并设置数据
+        std::cout << "\n--- 执行详细对比 ---" << std::endl;
+        StockDataComparator comparator;
+        comparator.setTolerance(tolerance);
+        comparator.setDataA(std::move(dataA));
+        comparator.setDataB(std::move(dataB));
+
+        // 4. 执行详细比较
+        auto result = comparator.compareDetailed();
+
+        // 5. 输出比较结果摘要
+        printComparisonSummary(result);
+
+        // 6. 写入差异文件
+        writeDifferencesToFiles(result, outputDir);
+
+        std::cout << "\n✅ 全量加载模式对比完成!" << std::endl;
+
+    } catch (const std::exception& e) {
+        std::cerr << "❌ 全量加载对比过程中发生错误: " << e.what() << std::endl;
+    }
+}
+
+// ============================================================
 // 原有流式模式函数
 // ============================================================
 
@@ -1021,14 +1082,20 @@ void printUsage(const char* programName) {
     std::cout << "  -t <容差值>        指定浮点数比较容差，默认: 1e-9" << std::endl;
     std::cout << "  -index <字段名>    指定额外的比较键字段（用于精确匹配）" << std::endl;
     std::cout << "  -split             启用分组模式（先按code分组，再比较）" << std::endl;
-    std::cout << "  --keep-split       保留临时分组文件（用于调试）" << std::endl;
+    std::cout << "  -full              启用全量加载模式（一次性加载整个文件）" << std::endl;
+    std::cout << "  --keep-split       保留临时分组文件（用于调试，仅分组模式）" << std::endl;
     std::cout << "  -h, --help         显示此帮助信息" << std::endl;
     std::cout << std::endl;
     std::cout << "对比模式:" << std::endl;
-    std::cout << "  流式模式（默认）  按时间戳顺序流式对比，速度快，内存低" << std::endl;
-    std::cout << "  分组模式（-split）先将文件按code完全分组，再逐个code对比" << std::endl;
+    std::cout << "  流式模式（默认）  按时间戳顺序流式对比，适合超大文件" << std::endl;
+    std::cout << "                     - 优势：内存占用低，可处理任意大小文件" << std::endl;
+    std::cout << "                     - 劣势：无法全局排序" << std::endl;
+    std::cout << "  分组模式（-split）先按code分组，再逐个code全量加载对比" << std::endl;
     std::cout << "                     - 优势：code数据完全隔离，易于调试" << std::endl;
     std::cout << "                     - 劣势：需要额外I/O和磁盘空间" << std::endl;
+    std::cout << "  全量模式（-full）  一次性加载两个完整文件到内存对比" << std::endl;
+    std::cout << "                     - 优势：支持全局排序，可处理乱序数据" << std::endl;
+    std::cout << "                     - 劣势：内存占用高（文件需<1GB）" << std::endl;
     std::cout << std::endl;
     std::cout << "示例:" << std::endl;
     std::cout << "  " << programName << " -a /path/to/fileA.json -b /path/to/fileB.json" << std::endl;
@@ -1038,6 +1105,7 @@ void printUsage(const char* programName) {
     std::cout << "  " << programName << " -a data1.json -b data2.json -index level -decimal 1000" << std::endl;
     std::cout << "  " << programName << " -a data1.json -b data2.json -split  # 分组模式" << std::endl;
     std::cout << "  " << programName << " -a data1.json -b data2.json -split --keep-split" << std::endl;
+    std::cout << "  " << programName << " -a data1.json -b data2.json -full   # 全量加载模式" << std::endl;
     std::cout << "  " << programName << " -a data1.json -b data2.json -decimal 1000" << std::endl;
     std::cout << "  " << programName << " -a data1.json -b data2.json -t 0.001" << std::endl;
     std::cout << "  " << programName << " --help" << std::endl;
@@ -1059,6 +1127,7 @@ int main(int argc, char* argv[]) {
     double tolerance = 1e-9;                  // 默认浮点数比较容差
     std::string compareKey;                   // 比较键字段名（默认为空）
     bool enableSplit = false;                 // 是否启用分组模式
+    bool enableFullLoad = false;              // 是否启用全量加载模式
     bool keepSplitFiles = false;              // 是否保留分组文件
 
     // 解析命令行参数
@@ -1159,6 +1228,9 @@ int main(int argc, char* argv[]) {
         else if (arg == "-split" || arg == "--group-by-code") {
             enableSplit = true;
         }
+        else if (arg == "-full" || arg == "--full-load") {
+            enableFullLoad = true;
+        }
         else if (arg == "--keep-split") {
             keepSplitFiles = true;
         }
@@ -1174,6 +1246,16 @@ int main(int argc, char* argv[]) {
         std::cerr << "❌ 必须指定两个输入文件!" << std::endl;
         std::cerr << "   使用 -a 指定文件A，使用 -b 指定文件B" << std::endl;
         printUsage(argv[0]);
+        return 1;
+    }
+
+    // 验证模式冲突
+    if (enableSplit && enableFullLoad) {
+        std::cerr << "❌ 不能同时使用 -split 和 -full 参数!" << std::endl;
+        std::cerr << "   请选择其中一种模式：" << std::endl;
+        std::cerr << "   - 分组模式：-split（按code分组后全量加载）" << std::endl;
+        std::cerr << "   - 全量模式：-full（直接全量加载整个文件）" << std::endl;
+        std::cerr << "   - 流式模式：不加任何参数（流式读取）" << std::endl;
         return 1;
     }
 
@@ -1219,6 +1301,10 @@ int main(int argc, char* argv[]) {
             // 分组模式
             std::cout << ">>> 使用分组模式（先按code分组，再比较）<<<" << std::endl;
             demonstrateGroupedComparison(fileA, fileB, outputDir, ignoreFields, indexDecimal, tolerance, keepSplitFiles, compareKey);
+        } else if (enableFullLoad) {
+            // 全量加载模式
+            std::cout << ">>> 使用全量加载模式（一次性加载整个文件）<<<" << std::endl;
+            demonstrateFullLoadComparison(fileA, fileB, outputDir, ignoreFields, indexDecimal, tolerance, compareKey);
         } else {
             // 流式模式（默认）
             std::cout << ">>> 使用流式模式（按时间戳流式对比）<<<" << std::endl;
