@@ -155,11 +155,29 @@ target_compile_features(FastCodeExtractor PUBLIC cxx_std_11)
 # FastCodeExtractor库依赖LineReader库
 target_link_libraries(FastCodeExtractor LineReader)
 
+# 创建FullFileLoader静态库
+add_library(FullFileLoader STATIC
+    src/FullFileLoader.cpp
+    include/FullFileLoader.h
+)
+
+# 设置FullFileLoader库的包含目录
+target_include_directories(FullFileLoader PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+    $<INSTALL_INTERFACE:include>
+)
+
+# 设置FullFileLoader库的C++标准
+target_compile_features(FullFileLoader PUBLIC cxx_std_11)
+
+# FullFileLoader库依赖StockDataContainer和LineReader库
+target_link_libraries(FullFileLoader StockDataContainer LineReader)
+
 # 创建JsonParser示例可执行文件
 add_executable(json_example example/main.cpp)
 
 # 链接JsonParser库到示例
-target_link_libraries(json_example JsonParser StockDataComparator StockDataBatchReader FastCodeExtractor)
+target_link_libraries(json_example JsonParser StockDataComparator StockDataBatchReader FastCodeExtractor FullFileLoader)
 
 # 创建FastCodeExtractor测试可执行文件
 add_executable(test_fast_code_extractor example/test_fast_code_extractor.cpp)
@@ -196,7 +214,7 @@ if(CMAKE_BUILD_TYPE STREQUAL "Debug")
 endif()
 
 # 安装规则（可选）
-install(TARGETS JsonParser LineReader GenericJsonContainer StockDataContainer StockDataBatchReader StockDataComparator FastCodeExtractor json_example test_fast_code_extractor split_by_code
+install(TARGETS JsonParser LineReader GenericJsonContainer StockDataContainer StockDataBatchReader StockDataComparator FastCodeExtractor FullFileLoader json_example test_fast_code_extractor split_by_code
     ARCHIVE DESTINATION lib
     LIBRARY DESTINATION lib
     RUNTIME DESTINATION bin

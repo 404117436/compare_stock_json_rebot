@@ -759,6 +759,7 @@ void compareCodeFiles(const std::string& codeFileA,
     } else {
         // 两个文件都存在，使用现有的流式比较逻辑
         demonstrateJsonFileComparison(codeFileA, codeFileB, outputDir, ignoreFields, indexDecimal, tolerance, compareKey);
+            auto result = comparator.compareDetailed();
     }
 }
 
