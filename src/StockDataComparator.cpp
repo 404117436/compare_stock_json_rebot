@@ -623,6 +623,9 @@ ComparisonResult StockDataComparator::compareDetailed() const {
                 }
                 if (!foundMatch) {
                     result.onlyInA++;
+                    // 生成 MISSING_IN_B 详细记录
+                    RecordComparisonDetail missDetail = createMissRecord(a_[idxA], false);
+                    result.addRecordDifference(missDetail);
                 }
                 totalRecords++;
             }
@@ -632,6 +635,9 @@ ComparisonResult StockDataComparator::compareDetailed() const {
                 if (!matchedB[j]) {
                     result.onlyInB++;
                     totalRecords++;
+                    // 生成 MISSING_IN_A 详细记录
+                    RecordComparisonDetail missDetail = createMissRecord(b_[indicesB[j]], true);
+                    result.addRecordDifference(missDetail);
                 }
             }
         }
